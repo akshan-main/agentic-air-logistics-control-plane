@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="280" viewBox="0 0 980 280" role="img" aria-label="Bi-temporal model: event time versus ingest time">
+  <rect width="980" height="280" fill="#ffffff" />
+  <style>
+    .title { font: 700 22px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; fill: #111111; }
+    .h { font: 700 16px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; fill: #111111; }
+    .t { font: 14px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; fill: #111111; }
+    .line { stroke: #111111; stroke-width: 2.5; }
+    .dot { fill: #111111; }
+    .note { fill: #ffffff; stroke: #111111; stroke-width: 2; }
+  </style>
+
+  <text x="40" y="44" class="title">Bi-temporal facts: what happened vs when we learned it</text>
+
+  <text x="40" y="86" class="h">Event time</text>
+  <line x1="40" y1="110" x2="940" y2="110" class="line" />
+
+  <circle cx="240" cy="110" r="6" class="dot" />
+  <text x="212" y="138" class="t">10:00</text>
+  <text x="165" y="158" class="t">Ground stop starts</text>
+
+  <circle cx="540" cy="110" r="6" class="dot" />
+  <text x="512" y="138" class="t">10:30</text>
+  <text x="455" y="158" class="t">Condition worsens</text>
+
+  <circle cx="820" cy="110" r="6" class="dot" />
+  <text x="792" y="138" class="t">11:00</text>
+  <text x="744" y="158" class="t">Recovery begins</text>
+
+  <text x="40" y="196" class="h">Ingest time</text>
+  <line x1="40" y1="220" x2="940" y2="220" class="line" />
+
+  <circle cx="300" cy="220" r="6" class="dot" />
+  <text x="272" y="248" class="t">10:05</text>
+  <text x="190" y="268" class="t">We ingest FAA + METAR</text>
+
+  <circle cx="620" cy="220" r="6" class="dot" />
+  <text x="592" y="248" class="t">10:40</text>
+  <text x="520" y="268" class="t">We ingest NWS alert</text>
+
+  <circle cx="860" cy="220" r="6" class="dot" />
+  <text x="832" y="248" class="t">11:10</text>
+  <text x="735" y="268" class="t">We ingest “all clear”</text>
+
+  <rect x="660" y="44" width="280" height="58" rx="10" class="note" />
+  <text x="678" y="70" class="t">Enables queries like:</text>
+  <text x="678" y="92" class="t">“What did we believe at 10:20?”</text>
+</svg>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic Air Logistics Control Plane</title>
+    <link rel="stylesheet" href="/ui/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Agentic Air Logistics Control Plane</h1>
+        <p class="subtitle">Gateway Posture Directive System</p>
+    </header>
+
+    <main>
+        <section class="control-panel">
+            <h2>Airport Operations</h2>
+
+            <div class="control-group">
+                <label for="airport-input">Airport</label>
+                <div class="airport-search">
+                    <input type="text" id="airport-input" placeholder="Search by city, airport name, or ICAO code..." autocomplete="off">
+                    <input type="hidden" id="airport-icao">
+                    <div id="airport-results" class="airport-results hidden"></div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button id="btn-ingest" class="btn btn-primary">Ingest Signals</button>
+                <button id="btn-create-case" class="btn btn-secondary">Create Case</button>
+                <button id="btn-run-agent" class="btn btn-success" disabled>Run Agent</button>
+            </div>
+
+            <div id="status-message" class="status-message hidden"></div>
+
+            <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--color-border);">
+                <h3>Demo Data (optional)</h3>
+                <p class="section-description">
+                    The downstream <strong>Context Graph Analysis</strong> section uses operational entities
+                    (flights/shipments/bookings). In this repo, those are <strong>simulated</strong> unless you
+                    integrate a real TMS/booking system. Seed demo data to make cascade impact visible.
+                </p>
+                <div class="button-group" style="margin-top: 10px;">
+                    <button id="btn-seed-ops" class="btn btn-outline" disabled>Seed Ops Graph</button>
+                    <button id="btn-clear-ops" class="btn btn-outline" disabled>Clear Ops Graph</button>
+                    <button id="btn-refresh-ops" class="btn btn-outline">Refresh Ops Stats</button>
+                </div>
+                <div id="ops-stats" style="margin-top: 10px; font-size: 0.8rem; color: var(--color-text-muted);">
+                    Ops graph: --
+                </div>
+            </div>
+        </section>
+
+        <section class="cases-panel">
+            <h2>Active Cases</h2>
+            <div id="cases-list" class="cases-list">
+                <p class="empty-state">No cases loaded</p>
+            </div>
+            <button id="btn-refresh-cases" class="btn btn-outline">Refresh Cases</button>
+        </section>
+
+        <!-- Simulation section hidden for demo - use /simulation API directly for testing -->
+        <section class="simulation-panel hidden" id="simulation-panel">
+            <h2>Simulation Testing</h2>
+            <p class="section-description">Run pre-built scenarios to validate system behavior without hitting real APIs.</p>
+
+            <div class="simulation-controls">
+                <div class="control-group">
+                    <label for="scenario-select">Select Scenario</label>
+                    <select id="scenario-select">
+                        <option value="">-- Loading scenarios... --</option>
+                    </select>
+                </div>
+
+                <div class="button-group">
+                    <button id="btn-run-simulation" class="btn btn-primary" disabled>Run Scenario</button>
+                    <button id="btn-run-all-simulations" class="btn btn-secondary">Run All Scenarios</button>
+                </div>
+            </div>
+
+            <div id="scenario-details" class="scenario-details hidden">
+                <h3>Scenario Details</h3>
+                <div class="scenario-info">
+                    <div class="scenario-meta">
+                        <span class="label">Airport:</span>
+                        <span id="scenario-airport">--</span>
+                    </div>
+                    <div class="scenario-meta">
+                        <span class="label">Expected Posture:</span>
+                        <span id="scenario-expected-posture" class="posture-badge small">--</span>
+                    </div>
+                    <div class="scenario-meta">
+                        <span class="label">Risk Level:</span>
+                        <span id="scenario-risk-level">--</span>
+                    </div>
+                </div>
+                <div id="scenario-description" class="scenario-description">--</div>
+                <div id="scenario-flags" class="scenario-flags">
+                    <span id="flag-contradiction" class="flag hidden">⚠️ Has Contradiction</span>
+                    <span id="flag-missing" class="flag hidden">⏳ Missing Source</span>
+                </div>
+            </div>
+
+            <div id="simulation-results" class="simulation-results hidden">
+                <h3>Simulation Results</h3>
+                <div class="results-summary">
+                    <div class="result-stat">
+                        <span class="stat-label">Total</span>
+                        <span id="sim-total" class="stat-value">0</span>
+                    </div>
+                    <div class="result-stat passed">
+                        <span class="stat-label">Passed</span>
+                        <span id="sim-passed" class="stat-value">0</span>
+                    </div>
+                    <div class="result-stat failed">
+                        <span class="stat-label">Failed</span>
+                        <span id="sim-failed" class="stat-value">0</span>
+                    </div>
+                    <div class="result-stat">
+                        <span class="stat-label">Pass Rate</span>
+                        <span id="sim-pass-rate" class="stat-value">--</span>
+                    </div>
+                </div>
+                <div id="results-list" class="results-list"></div>
+            </div>
+        </section>
+
+        <section class="packet-panel hidden" id="packet-panel">
+            <h2>Decision Packet</h2>
+
+            <div class="packet-header">
+                <div class="posture-badge" id="posture-badge">--</div>
+                <div class="packet-meta">
+                    <span id="packet-case-id">Case: --</span>
+                    <span id="packet-pdl">PDL: --</span>
+                </div>
+            </div>
+
+            <div class="packet-section">
+                <h3>Scope</h3>
+                <div id="packet-scope" class="code-block">--</div>
+            </div>
+
+            <div class="packet-section">
+                <h3>Timestamps</h3>
+                <div id="packet-timestamps" class="timestamp-list">--</div>
+            </div>
+
+            <div class="packet-section">
+                <h3>Claims <span class="count" id="claims-count">0</span></h3>
+                <div id="packet-claims" class="claims-list">--</div>
+            </div>
+
+            <div class="packet-section">
+                <h3>Evidence <span class="count" id="evidence-count">0</span></h3>
+                <div id="packet-evidence" class="evidence-list">--</div>
+            </div>
+
+            <div class="packet-section">
+                <h3>Contradictions</h3>
+                <div id="packet-contradictions" class="contradictions-list">--</div>
+            </div>
+
+            <div class="packet-section">
+                <h3>Actions</h3>
+                <div id="packet-actions" class="actions-list">--</div>
+            </div>
+
+            <div class="packet-section blocked-section hidden" id="blocked-section">
+                <h3>BLOCKED</h3>
+                <div id="packet-blocked" class="blocked-list">--</div>
+            </div>
+
+            <div class="packet-section">
+                <h3>Policies Applied</h3>
+                <div id="packet-policies" class="policies-list">--</div>
+            </div>
+
+            <div class="packet-section" id="cascade-section">
+                <h3 class="collapsible-header" onclick="toggleSection('cascade')">
+                    <span>🔗 Context Graph Analysis</span>
+                    <span id="cascade-toggle" class="toggle-icon">▼</span>
+                </h3>
+                <div id="packet-cascade" class="cascade-impact collapsible-content">--</div>
+            </div>
+
+            <div class="packet-section" id="workflow-section">
+                <h3 class="collapsible-header" onclick="toggleSection('workflow')">
+                    <span>Workflow Trace</span>
+                    <span id="workflow-toggle" class="toggle-icon">▼</span>
+                </h3>
+                <div id="packet-workflow" class="workflow-trace collapsible-content collapsed">--</div>
+            </div>
+
+            <div class="packet-section" id="confidence-section">
+                <h3 class="collapsible-header" onclick="toggleSection('confidence')">
+                    <span>Confidence Breakdown</span>
+                    <span id="confidence-toggle" class="toggle-icon">▼</span>
+                </h3>
+                <div id="packet-confidence" class="confidence-breakdown collapsible-content collapsed">--</div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Agentic Air Logistics Control Plane v0.1.0 | PDL Target: &lt;5 minutes</p>
+    </footer>
+
+    <script src="/ui/airports.js"></script>
+    <script src="/ui/app.js?v=10"></script>
+</body>
+</html>

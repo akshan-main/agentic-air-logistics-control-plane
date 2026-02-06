@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-label="Agentic Air Logistics Control Plane 12-state agent pipeline">
+  <rect width="1200" height="520" fill="#ffffff" />
+  <style>
+    .title { font: 700 22px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; fill: #111111; }
+    .h { font: 700 14px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; fill: #111111; }
+    .t { font: 12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; fill: #111111; }
+    .box { fill: #ffffff; stroke: #111111; stroke-width: 2; }
+    .arrow { stroke: #111111; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+    .muted { fill: #444444; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#111111" />
+    </marker>
+  </defs>
+
+  <text x="40" y="44" class="title">Agentic Air Logistics Control Plane</text>
+  <text x="40" y="70" class="t muted">Implemented as explicit states in app/agents/state_graph.py (not an unbounded “agent loop”).</text>
+
+  <!-- Layout constants:
+       6 columns, 2 rows
+       box: 170x72
+       gapX: 18, gapY: 64
+  -->
+
+  <!-- Row 1 -->
+  <rect x="40" y="110" width="170" height="72" rx="12" class="box" />
+  <text x="54" y="136" class="h">S0_INIT_CASE</text>
+  <text x="54" y="158" class="t">Initialize case</text>
+
+  <rect x="228" y="110" width="170" height="72" rx="12" class="box" />
+  <text x="242" y="136" class="h">S1_INGEST</text>
+  <text x="242" y="158" class="t">Ingest signals</text>
+
+  <rect x="416" y="110" width="170" height="72" rx="12" class="box" />
+  <text x="430" y="136" class="h">S2_BELIEF</text>
+  <text x="430" y="158" class="t">Build belief state</text>
+
+  <rect x="604" y="110" width="170" height="72" rx="12" class="box" />
+  <text x="618" y="136" class="h">S3_CONTRADICT</text>
+  <text x="618" y="158" class="t">Detect contradictions</text>
+
+  <rect x="792" y="110" width="170" height="72" rx="12" class="box" />
+  <text x="806" y="136" class="h">S4_PLAN</text>
+  <text x="806" y="158" class="t">Plan next evidence</text>
+
+  <rect x="980" y="110" width="170" height="72" rx="12" class="box" />
+  <text x="994" y="136" class="h">S5_GATHER</text>
+  <text x="994" y="158" class="t">Gather evidence</text>
+
+  <!-- Arrows row 1 -->
+  <path class="arrow" d="M 210 146 L 228 146" />
+  <path class="arrow" d="M 398 146 L 416 146" />
+  <path class="arrow" d="M 586 146 L 604 146" />
+  <path class="arrow" d="M 774 146 L 792 146" />
+  <path class="arrow" d="M 962 146 L 980 146" />
+
+  <!-- Row 2 -->
+  <rect x="40" y="246" width="170" height="72" rx="12" class="box" />
+  <text x="54" y="272" class="h">S6_EVALUATE</text>
+  <text x="54" y="294" class="t">Enough evidence?</text>
+
+  <rect x="228" y="246" width="170" height="72" rx="12" class="box" />
+  <text x="242" y="272" class="h">S7_ACTIONS</text>
+  <text x="242" y="294" class="t">Propose actions</text>
+
+  <rect x="416" y="246" width="170" height="72" rx="12" class="box" />
+  <text x="430" y="272" class="h">S8_GOVERN</text>
+  <text x="430" y="294" class="t">Governance review</text>
+
+  <rect x="604" y="246" width="170" height="72" rx="12" class="box" />
+  <text x="618" y="272" class="h">S9_EXECUTE</text>
+  <text x="618" y="294" class="t">Execute or block</text>
+
+  <rect x="792" y="246" width="170" height="72" rx="12" class="box" />
+  <text x="806" y="272" class="h">S10_PACKETIZE</text>
+  <text x="806" y="294" class="t">Decision packet</text>
+
+  <rect x="980" y="246" width="170" height="72" rx="12" class="box" />
+  <text x="994" y="272" class="h">S11_REPLAY</text>
+  <text x="994" y="294" class="t">Learn + reuse</text>
+
+  <!-- Arrows row 2 -->
+  <path class="arrow" d="M 210 282 L 228 282" />
+  <path class="arrow" d="M 398 282 L 416 282" />
+  <path class="arrow" d="M 586 282 L 604 282" />
+  <path class="arrow" d="M 774 282 L 792 282" />
+  <path class="arrow" d="M 962 282 L 980 282" />
+
+  <!-- Row wrap arrow -->
+  <path class="arrow" d="M 1065 182 C 1120 182 1120 216 1065 216 L 125 216 C 70 216 70 216 70 238" />
+
+  <!-- Feedback loop note -->
+  <rect x="40" y="360" width="1110" height="120" rx="14" class="box" />
+  <text x="64" y="392" class="h">Deterministic feedback loops</text>
+  <text x="64" y="418" class="t">S6 can loop back to S3 when evidence is insufficient or contradictions remain.</text>
+  <text x="64" y="442" class="t">S3 can short-circuit to S7 when there are no open uncertainties to resolve.</text>
+  <text x="64" y="466" class="t">LLMs are used inside role agents (RiskQuant/Critic/Comms), not to decide the next state.</text>
+</svg>

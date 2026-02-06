@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="420" viewBox="0 0 980 420" role="img" aria-label="Decision packet contents">
+  <rect width="980" height="420" fill="#ffffff" />
+  <style>
+    .title { font: 700 22px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; fill: #111111; }
+    .h { font: 700 16px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; fill: #111111; }
+    .t { font: 14px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; fill: #111111; }
+    .box { fill: #ffffff; stroke: #111111; stroke-width: 2; }
+    .sub { fill: #f7f7f7; stroke: #111111; stroke-width: 2; }
+  </style>
+
+  <text x="40" y="44" class="title">Decision packet (audit artifact)</text>
+
+  <rect x="40" y="80" width="900" height="300" rx="14" class="box" />
+  <text x="64" y="114" class="h">Packet</text>
+  <text x="64" y="140" class="t">Case scope • timestamps • posture • rationale • full trace</text>
+
+  <rect x="64" y="168" width="410" height="90" rx="12" class="sub" />
+  <text x="84" y="198" class="h">Posture + rationale</text>
+  <text x="84" y="222" class="t">ACCEPT / RESTRICT / HOLD / ESCALATE</text>
+  <text x="84" y="246" class="t">Why (with linked evidence)</text>
+
+  <rect x="502" y="168" width="410" height="90" rx="12" class="sub" />
+  <text x="522" y="198" class="h">Claims + evidence</text>
+  <text x="522" y="222" class="t">Status: DRAFT / FACT / HYPOTHESIS</text>
+  <text x="522" y="246" class="t">Every FACT cites immutable bytes</text>
+
+  <rect x="64" y="274" width="410" height="90" rx="12" class="sub" />
+  <text x="84" y="304" class="h">Policies + governance</text>
+  <text x="84" y="328" class="t">Which policies applied</text>
+  <text x="84" y="352" class="t">Approval required? (yes/no)</text>
+
+  <rect x="502" y="274" width="410" height="90" rx="12" class="sub" />
+  <text x="522" y="304" class="h">Actions + metrics</text>
+  <text x="522" y="328" class="t">Proposed/executed actions</text>
+  <text x="522" y="352" class="t">PDL + confidence breakdown</text>
+</svg>

@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-label="Agentic Air Logistics Control Plane overview pipeline">
+  <rect width="1200" height="360" fill="#ffffff" />
+  <style>
+    .title { font: 700 22px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; fill: #111111; }
+    .h { font: 700 16px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; fill: #111111; }
+    .t { font: 14px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; fill: #111111; }
+    .box { fill: #ffffff; stroke: #111111; stroke-width: 2; }
+    .arrow { stroke: #111111; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#111111" />
+    </marker>
+  </defs>
+
+  <text x="40" y="44" class="title">Agentic Air Logistics Control Plane</text>
+
+  <rect x="40" y="80" width="210" height="220" rx="12" class="box" />
+  <text x="58" y="110" class="h">External signals</text>
+  <text x="58" y="140" class="t">• FAA NAS status</text>
+  <text x="58" y="162" class="t">• METAR / TAF</text>
+  <text x="58" y="184" class="t">• NWS alerts</text>
+  <text x="58" y="206" class="t">• OpenSky ADS‑B</text>
+  <text x="58" y="236" class="t">(+ simulated ops data)</text>
+
+  <rect x="290" y="80" width="210" height="220" rx="12" class="box" />
+  <text x="308" y="110" class="h">Ingestion + evidence</text>
+  <text x="308" y="140" class="t">1. Fetch payloads</text>
+  <text x="308" y="162" class="t">2. Hash + store bytes</text>
+  <text x="308" y="184" class="t">3. Derive signals</text>
+  <text x="308" y="206" class="t">4. Emit claims/edges</text>
+
+  <rect x="540" y="80" width="210" height="220" rx="12" class="box" />
+  <text x="558" y="110" class="h">Bi-temporal graph</text>
+  <text x="558" y="140" class="t">• Nodes / edges</text>
+  <text x="558" y="162" class="t">• Claims (DRAFT/FACT)</text>
+  <text x="558" y="184" class="t">• event_time + ingest_time</text>
+  <text x="558" y="206" class="t">• Evidence binding enforced</text>
+
+  <rect x="790" y="80" width="210" height="220" rx="12" class="box" />
+  <text x="808" y="110" class="h">Deterministic agent</text>
+  <text x="808" y="140" class="t">• Investigator</text>
+  <text x="808" y="162" class="t">• Risk quant</text>
+  <text x="808" y="184" class="t">• Critic + policy judge</text>
+  <text x="808" y="206" class="t">• Governance gates</text>
+
+  <rect x="1040" y="80" width="140" height="220" rx="12" class="box" />
+  <text x="1056" y="110" class="h">Output</text>
+  <text x="1056" y="140" class="t">Decision packet</text>
+  <text x="1056" y="170" class="t">Posture:</text>
+  <text x="1056" y="192" class="t">ACCEPT</text>
+  <text x="1056" y="214" class="t">RESTRICT</text>
+  <text x="1056" y="236" class="t">HOLD</text>
+  <text x="1056" y="258" class="t">ESCALATE</text>
+
+  <path class="arrow" d="M 250 190 L 290 190" />
+  <path class="arrow" d="M 500 190 L 540 190" />
+  <path class="arrow" d="M 750 190 L 790 190" />
+  <path class="arrow" d="M 1000 190 L 1040 190" />
+</svg>

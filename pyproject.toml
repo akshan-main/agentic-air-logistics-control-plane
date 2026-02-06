@@ -1,0 +1,68 @@
+[project]
+name = "agentic-air-logistics-control-plane"
+version = "0.1.0"
+description = "Evidence-bound context graph + directives for air-freight gateways"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+    "httpx>=0.26.0",
+    "tenacity>=8.2.0",
+    "pydantic>=2.5.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+]
+ml = [
+    "sentence-transformers>=2.2.0",
+    "pgvector>=0.2.0",
+]
+llm = [
+    "openai>=1.10.0",
+    "anthropic>=0.18.0",
+]
+all = [
+    "agentic-air-logistics-control-plane[dev,ml,llm]",
+]
+
+[project.scripts]
+aalcp = "app.main:run"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "tests*", "simulation*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+markers = [
+    "requires_db: marks tests as requiring database connection (deselect with '-m \"not requires_db\"')",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["tests/*", "app/ui/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]

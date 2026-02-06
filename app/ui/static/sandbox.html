@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sandbox - Agentic Air Logistics Control Plane</title>
+    <link rel="stylesheet" href="/ui/styles.css">
+    <style>
+        /* Sandbox-specific styles */
+        main {
+            display: block;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .sandbox-input-panel {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .sandbox-input-panel .control-group {
+            flex: 1;
+            min-width: 250px;
+            margin-bottom: 0;
+        }
+
+        .sandbox-input-panel .btn {
+            min-width: 150px;
+            height: 42px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .summary-card {
+            background-color: var(--color-bg);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .summary-card .card-label {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+
+        .summary-card .card-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+        }
+
+        .summary-card .card-sub {
+            font-size: 0.8rem;
+            color: var(--color-text-muted);
+            margin-top: 3px;
+        }
+
+        .summary-card.posture {
+            grid-column: span 2;
+        }
+
+        .summary-card.posture .card-value.ACCEPT { color: var(--color-accept); }
+        .summary-card.posture .card-value.RESTRICT { color: var(--color-restrict); }
+        .summary-card.posture .card-value.HOLD { color: var(--color-hold); }
+        .summary-card.posture .card-value.ESCALATE { color: var(--color-escalate); }
+
+        .summary-card.risk .card-value.LOW { color: var(--color-success); }
+        .summary-card.risk .card-value.MEDIUM { color: var(--color-warning); }
+        .summary-card.risk .card-value.HIGH { color: var(--color-danger); }
+        .summary-card.risk .card-value.CRITICAL { color: var(--color-escalate); }
+
+        .section-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .section-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .sandbox-section {
+            margin-bottom: 20px;
+        }
+
+        .sandbox-section h3 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .sandbox-section .section-badge {
+            background-color: var(--color-border);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+        }
+
+        .data-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .data-item {
+            padding: 12px;
+            background-color: var(--color-bg);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border-left: 3px solid var(--color-border);
+        }
+
+        .data-item.fact {
+            border-left-color: var(--color-success);
+        }
+
+        .data-item.hypothesis {
+            border-left-color: var(--color-warning);
+        }
+
+        .data-item .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .data-item .item-source {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--color-primary);
+            font-weight: 600;
+        }
+
+        .data-item .item-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .data-item .item-badge.fact {
+            background-color: rgba(63, 185, 80, 0.2);
+            color: var(--color-success);
+        }
+
+        .data-item .item-badge.hypothesis {
+            background-color: rgba(210, 153, 34, 0.2);
+            color: var(--color-warning);
+        }
+
+        .data-item .item-text {
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .data-item .item-meta {
+            font-size: 0.8rem;
+            color: var(--color-text-muted);
+            margin-top: 8px;
+            font-family: var(--font-mono);
+        }
+
+        .contradiction-item {
+            border-left-color: var(--color-warning);
+        }
+
+        .contradiction-item .conflict-label {
+            font-size: 0.75rem;
+            color: var(--color-warning);
+            margin-bottom: 5px;
+        }
+
+        .action-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .action-item .action-type {
+            font-weight: 600;
+            font-family: var(--font-mono);
+        }
+
+        .action-item .action-args {
+            font-size: 0.85rem;
+            color: var(--color-text-muted);
+            margin-top: 5px;
+        }
+
+        .action-item .action-badges {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .action-item .approval-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background-color: rgba(248, 81, 73, 0.2);
+            color: var(--color-danger);
+        }
+
+        .action-item .risk-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .action-item .risk-badge.LOW { background-color: rgba(63, 185, 80, 0.2); color: var(--color-success); }
+        .action-item .risk-badge.MEDIUM { background-color: rgba(210, 153, 34, 0.2); color: var(--color-warning); }
+        .action-item .risk-badge.HIGH { background-color: rgba(248, 81, 73, 0.2); color: var(--color-danger); }
+        .action-item .risk-badge.CRITICAL { background-color: rgba(188, 140, 255, 0.2); color: var(--color-escalate); }
+
+        .risk-factor-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .risk-factor {
+            font-size: 0.8rem;
+            padding: 4px 10px;
+            border-radius: 4px;
+            background-color: var(--color-bg);
+            font-family: var(--font-mono);
+        }
+
+        .risk-factor .weight {
+            color: var(--color-warning);
+            margin-left: 5px;
+        }
+
+        .cascade-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .cascade-stat {
+            background-color: var(--color-bg);
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .cascade-stat .stat-value {
+            font-size: 1.2rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            color: var(--color-primary);
+        }
+
+        .cascade-stat .stat-label {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+        }
+
+        .cascade-stat.revenue .stat-value {
+            color: var(--color-warning);
+        }
+
+        .raw-data-section {
+            margin-top: 10px;
+        }
+
+        .raw-data-source {
+            margin-bottom: 10px;
+        }
+
+        .raw-data-source .source-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background-color: var(--color-surface);
+            border-radius: 6px 6px 0 0;
+            border: 1px solid var(--color-border);
+            border-bottom: none;
+            cursor: pointer;
+        }
+
+        .raw-data-source .source-header:hover {
+            background-color: var(--color-bg);
+        }
+
+        .raw-data-source .source-name {
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
+
+        .raw-data-source .source-status {
+            font-size: 0.8rem;
+        }
+
+        .raw-data-source .source-status.success {
+            color: var(--color-success);
+        }
+
+        .raw-data-source .source-status.error {
+            color: var(--color-danger);
+        }
+
+        .raw-data-source .source-content {
+            background-color: var(--color-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 0 0 6px 6px;
+            padding: 10px;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            max-height: 200px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .raw-data-source .source-content.collapsed {
+            display: none;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(13, 17, 23, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .loading-overlay .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid var(--color-border);
+            border-top-color: var(--color-primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .loading-overlay .loading-text {
+            margin-top: 20px;
+            font-size: 1.1rem;
+            color: var(--color-text);
+        }
+
+        .loading-overlay .loading-sub {
+            margin-top: 5px;
+            font-size: 0.9rem;
+            color: var(--color-text-muted);
+        }
+
+        .nav-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: var(--color-primary);
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+
+        .empty-results {
+            text-align: center;
+            padding: 40px;
+            color: var(--color-text-muted);
+        }
+
+        .empty-results .icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 5px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+
+        .checkbox-group label {
+            font-size: 0.85rem;
+            color: var(--color-text-muted);
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Sandbox Mode</h1>
+        <p class="subtitle">Real-time API Data Analysis</p>
+    </header>
+
+    <main>
+        <a href="/ui/" class="nav-link">&larr; Back to Main Dashboard</a>
+
+        <section class="control-panel">
+            <h2>Run Analysis</h2>
+            <p style="font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 15px;">
+                Enter an airport ICAO code to fetch REAL data from all 5 APIs and see the complete system output.
+            </p>
+
+            <div class="sandbox-input-panel">
+                <div class="control-group">
+                    <label for="airport-input">Airport (US only)</label>
+                    <div class="airport-search">
+                        <input type="text" id="airport-input" placeholder="Search by city, airport name, or ICAO code..." autocomplete="off">
+                        <input type="hidden" id="airport-icao">
+                        <div id="airport-results" class="airport-results hidden"></div>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="include-opensky" checked>
+                        <label for="include-opensky">Include OpenSky ADS-B data (may be slow)</label>
+                    </div>
+                </div>
+                <button id="btn-run-sandbox" class="btn btn-primary" disabled>Run Sandbox Analysis</button>
+            </div>
+
+            <div id="status-message" class="status-message hidden"></div>
+        </section>
+
+        <!-- Loading overlay -->
+        <div id="loading-overlay" class="loading-overlay hidden">
+            <div class="spinner"></div>
+            <div class="loading-text">Fetching Real-Time Data...</div>
+            <div class="loading-sub">Connecting to FAA, Aviation Weather, NWS, and OpenSky APIs</div>
+        </div>
+
+        <!-- Results -->
+        <div id="results-container" class="hidden">
+            <!-- Summary Section -->
+            <section class="sandbox-section" id="summary-section">
+                <h2>Summary</h2>
+                <div class="summary-grid">
+                    <div class="summary-card posture">
+                        <div class="card-label">Recommended Posture</div>
+                        <div class="card-value" id="summary-posture">--</div>
+                        <div class="card-sub" id="summary-airport">--</div>
+                    </div>
+                    <div class="summary-card risk">
+                        <div class="card-label">Risk Level</div>
+                        <div class="card-value" id="summary-risk">--</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="card-label">Confidence</div>
+                        <div class="card-value" id="summary-confidence">--</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="card-label">Sources</div>
+                        <div class="card-value" id="summary-sources">--</div>
+                        <div class="card-sub" id="summary-sources-failed"></div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="card-label">Claims</div>
+                        <div class="card-value" id="summary-claims">--</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="card-label">Contradictions</div>
+                        <div class="card-value" id="summary-contradictions">--</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="card-label">Actions</div>
+                        <div class="card-value" id="summary-actions">--</div>
+                        <div class="card-sub" id="summary-approvals"></div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="section-grid">
+                <!-- Risk Assessment -->
+                <section class="sandbox-section">
+                    <h3>Risk Assessment</h3>
+                    <div id="risk-assessment-content">
+                        <div class="data-item">
+                            <div class="item-header">
+                                <span class="item-source">Overall Assessment</span>
+                                <span class="item-badge" id="risk-level-badge">--</span>
+                            </div>
+                            <div class="item-text">
+                                <strong>Posture:</strong> <span id="risk-posture">--</span><br>
+                                <strong>Confidence:</strong> <span id="risk-confidence">--</span><br>
+                                <strong>Total Risk Weight:</strong> <span id="risk-weight">--</span>
+                            </div>
+                            <div class="risk-factor-list" id="risk-factors"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Claims -->
+                <section class="sandbox-section">
+                    <h3>Claims <span class="section-badge" id="claims-count">0</span></h3>
+                    <div id="claims-list" class="data-list"></div>
+                </section>
+
+                <!-- Evidence -->
+                <section class="sandbox-section">
+                    <h3>Evidence <span class="section-badge" id="evidence-count">0</span></h3>
+                    <div id="evidence-list" class="data-list"></div>
+                </section>
+
+                <!-- Contradictions -->
+                <section class="sandbox-section">
+                    <h3>Contradictions <span class="section-badge" id="contradictions-count">0</span></h3>
+                    <div id="contradictions-list" class="data-list"></div>
+                </section>
+            </div>
+
+            <!-- Proposed Actions -->
+            <section class="sandbox-section">
+                <h3>Proposed Actions <span class="section-badge" id="actions-count">0</span></h3>
+                <div id="actions-list" class="data-list"></div>
+            </section>
+
+            <!-- Cascade Analysis -->
+            <section class="sandbox-section">
+                <h3>Cascade Analysis (Context Graph)</h3>
+                <div class="cascade-stats" id="cascade-stats">
+                    <div class="cascade-stat">
+                        <div class="stat-value" id="cascade-flights">0</div>
+                        <div class="stat-label">Flights Affected</div>
+                    </div>
+                    <div class="cascade-stat">
+                        <div class="stat-value" id="cascade-shipments">0</div>
+                        <div class="stat-label">Shipments</div>
+                    </div>
+                    <div class="cascade-stat">
+                        <div class="stat-value" id="cascade-bookings">0</div>
+                        <div class="stat-label">Bookings</div>
+                    </div>
+                    <div class="cascade-stat revenue">
+                        <div class="stat-value" id="cascade-revenue">$0</div>
+                        <div class="stat-label">Revenue at Risk</div>
+                    </div>
+                    <div class="cascade-stat">
+                        <div class="stat-value" id="cascade-sla">0</div>
+                        <div class="stat-label">SLAs at Risk</div>
+                    </div>
+                </div>
+                <div id="cascade-details"></div>
+            </section>
+
+            <!-- Raw API Data (Collapsible) -->
+            <section class="sandbox-section">
+                <h3 class="collapsible-header" onclick="toggleRawData()">
+                    <span>Raw API Data</span>
+                    <span id="raw-data-toggle" class="toggle-icon">▼</span>
+                </h3>
+                <div id="raw-data-content" class="raw-data-section collapsible-content collapsed"></div>
+            </section>
+
+            <!-- Decision Packet (Collapsible) -->
+            <section class="sandbox-section">
+                <h3 class="collapsible-header" onclick="togglePacket()">
+                    <span>Decision Packet (Full JSON)</span>
+                    <span id="packet-toggle" class="toggle-icon">▼</span>
+                </h3>
+                <div id="packet-content" class="collapsible-content collapsed">
+                    <pre class="code-block" id="packet-json" style="max-height: 400px; overflow: auto;"></pre>
+                </div>
+            </section>
+        </div>
+
+        <!-- Empty state -->
+        <div id="empty-state" class="empty-results">
+            <div class="icon">&#128269;</div>
+            <h3>Enter an airport to begin</h3>
+            <p>The sandbox will fetch real-time data from FAA, Aviation Weather, NWS, and OpenSky APIs.</p>
+        </div>
+    </main>
+
+    <footer>
+        <p>Agentic Air Logistics Control Plane v0.1.0 | Sandbox Mode - Real API Data Only</p>
+    </footer>
+
+    <script src="/ui/airports.js"></script>
+    <script>
+        // ============================================================
+        // SANDBOX UI LOGIC
+        // ============================================================
+
+        let selectedAirport = null;
+
+        // Initialize airport search
+        const airportInput = document.getElementById('airport-input');
+        const airportIcao = document.getElementById('airport-icao');
+        const airportResults = document.getElementById('airport-results');
+        const btnRunSandbox = document.getElementById('btn-run-sandbox');
+        const includeOpensky = document.getElementById('include-opensky');
+        const statusMessage = document.getElementById('status-message');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const resultsContainer = document.getElementById('results-container');
+        const emptyState = document.getElementById('empty-state');
+
+        // Airport search functionality
+        airportInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            if (query.length < 2) {
+                airportResults.classList.add('hidden');
+                return;
+            }
+
+            const results = searchAirports(query);
+            if (results.length === 0) {
+                airportResults.classList.add('hidden');
+                return;
+            }
+
+            airportResults.innerHTML = results.slice(0, 10).map(airport => `
+                <div class="airport-result-item" data-icao="${airport.icao}">
+                    <span class="icao">${airport.icao}</span>
+                    <span class="name">${airport.name}</span>
+                    <span class="city">${airport.city}, ${airport.state}</span>
+                </div>
+            `).join('');
+
+            airportResults.classList.remove('hidden');
+        });
+
+        // Click on airport result
+        airportResults.addEventListener('click', (e) => {
+            const item = e.target.closest('.airport-result-item');
+            if (!item) return;
+
+            const icao = item.dataset.icao;
+            const name = item.querySelector('.name').textContent;
+
+            selectedAirport = icao;
+            airportInput.value = `${icao} - ${name}`;
+            airportIcao.value = icao;
+            airportResults.classList.add('hidden');
+            btnRunSandbox.disabled = false;
+        });
+
+        // Click outside to close results
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.airport-search')) {
+                airportResults.classList.add('hidden');
+            }
+        });
+
+        // Run sandbox
+        btnRunSandbox.addEventListener('click', runSandbox);
+
+        async function runSandbox() {
+            if (!selectedAirport) {
+                showStatus('Please select an airport', 'error');
+                return;
+            }
+
+            // Show loading
+            loadingOverlay.classList.remove('hidden');
+            resultsContainer.classList.add('hidden');
+            emptyState.classList.add('hidden');
+            statusMessage.classList.add('hidden');
+
+            try {
+                const response = await fetch('/sandbox', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        airport: selectedAirport,
+                        include_opensky: includeOpensky.checked
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to run sandbox');
+                }
+
+                const data = await response.json();
+                displayResults(data);
+
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'error');
+                emptyState.classList.remove('hidden');
+            } finally {
+                loadingOverlay.classList.add('hidden');
+            }
+        }
+
+        function displayResults(data) {
+            resultsContainer.classList.remove('hidden');
+
+            // Summary
+            const summary = data.summary;
+            document.getElementById('summary-posture').textContent = summary.posture;
+            document.getElementById('summary-posture').className = `card-value ${summary.posture}`;
+            document.getElementById('summary-airport').textContent = summary.airport;
+            document.getElementById('summary-risk').textContent = summary.risk_level;
+            document.getElementById('summary-risk').className = `card-value ${summary.risk_level}`;
+            document.getElementById('summary-confidence').textContent = `${Math.round(summary.confidence * 100)}%`;
+            document.getElementById('summary-sources').textContent = summary.sources_fetched;
+            document.getElementById('summary-sources-failed').textContent = summary.sources_failed > 0 ? `${summary.sources_failed} failed` : 'All OK';
+            document.getElementById('summary-claims').textContent = summary.claims_derived;
+            document.getElementById('summary-contradictions').textContent = summary.contradictions_detected;
+            document.getElementById('summary-actions').textContent = summary.actions_proposed;
+            document.getElementById('summary-approvals').textContent = `${summary.actions_requiring_approval} need approval`;
+
+            // Risk Assessment
+            const risk = data.risk_assessment;
+            document.getElementById('risk-level-badge').textContent = risk.risk_level;
+            document.getElementById('risk-level-badge').className = `item-badge ${risk.risk_level.toLowerCase()}`;
+            document.getElementById('risk-posture').textContent = risk.recommended_posture;
+            document.getElementById('risk-confidence').textContent = `${Math.round(risk.overall_confidence * 100)}%`;
+            document.getElementById('risk-weight').textContent = risk.total_risk_weight;
+
+            const factorsHtml = risk.risk_factors.map(f => `
+                <span class="risk-factor">${f.factor} <span class="weight">${f.weight}</span></span>
+            `).join('');
+            document.getElementById('risk-factors').innerHTML = factorsHtml || '<span class="risk-factor">No risk factors</span>';
+
+            // Claims
+            document.getElementById('claims-count').textContent = data.claims.length;
+            const claimsHtml = data.claims.map(claim => `
+                <div class="data-item ${claim.status.toLowerCase()}">
+                    <div class="item-header">
+                        <span class="item-source">${claim.source}</span>
+                        <span class="item-badge ${claim.status.toLowerCase()}">${claim.status}</span>
+                    </div>
+                    <div class="item-text">${claim.text}</div>
+                    <div class="item-meta">
+                        Confidence: ${Math.round(claim.confidence * 100)}% |
+                        Evidence bound: ${claim.evidence_bound ? 'Yes' : 'No'}
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('claims-list').innerHTML = claimsHtml || '<p class="empty-state">No claims derived</p>';
+
+            // Evidence
+            document.getElementById('evidence-count').textContent = data.evidence.length;
+            const evidenceHtml = data.evidence.map(e => `
+                <div class="data-item fact">
+                    <div class="item-header">
+                        <span class="item-source">${e.source_system}</span>
+                        <span class="item-badge fact">${e.status}</span>
+                    </div>
+                    <div class="item-text">Retrieved at: ${new Date(e.retrieved_at).toLocaleString()}</div>
+                    <div class="item-meta">ID: ${e.id.substring(0, 8)}...</div>
+                </div>
+            `).join('');
+            document.getElementById('evidence-list').innerHTML = evidenceHtml || '<p class="empty-state">No evidence</p>';
+
+            // Contradictions
+            document.getElementById('contradictions-count').textContent = data.contradictions.length;
+            if (data.contradictions.length === 0) {
+                document.getElementById('contradictions-list').innerHTML = '<p class="empty-state" style="color: var(--color-success);">No contradictions detected</p>';
+            } else {
+                const contradictionsHtml = data.contradictions.map(c => `
+                    <div class="data-item contradiction-item">
+                        <div class="conflict-label">${c.type}</div>
+                        <div class="item-text">${c.description}</div>
+                        <div class="item-meta">Status: ${c.resolution_status}</div>
+                    </div>
+                `).join('');
+                document.getElementById('contradictions-list').innerHTML = contradictionsHtml;
+            }
+
+            // Actions
+            document.getElementById('actions-count').textContent = data.proposed_actions.length;
+            const actionsHtml = data.proposed_actions.map(a => `
+                <div class="data-item action-item">
+                    <div>
+                        <div class="action-type">${a.type}</div>
+                        <div class="action-args">${JSON.stringify(a.args)}</div>
+                    </div>
+                    <div class="action-badges">
+                        <span class="risk-badge ${a.risk_level}">${a.risk_level}</span>
+                        ${a.requires_approval ? '<span class="approval-badge">Requires Approval</span>' : ''}
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('actions-list').innerHTML = actionsHtml || '<p class="empty-state">No actions proposed</p>';
+
+            // Cascade Analysis
+            const cascade = data.graph_context.cascade_analysis;
+            if (cascade && cascade.totals) {
+                document.getElementById('cascade-flights').textContent = cascade.totals.flights || 0;
+                document.getElementById('cascade-shipments').textContent = cascade.totals.shipments || 0;
+                document.getElementById('cascade-bookings').textContent = cascade.totals.bookings || 0;
+                document.getElementById('cascade-revenue').textContent = '$' + (cascade.totals.revenue_at_risk_usd || 0).toLocaleString();
+                document.getElementById('cascade-sla').textContent = cascade.totals.sla_at_risk || 0;
+            }
+
+            // Raw API Data
+            const rawData = data.raw_api_data;
+            let rawDataHtml = '';
+            for (const [source, sourceData] of Object.entries(rawData.sources)) {
+                rawDataHtml += `
+                    <div class="raw-data-source">
+                        <div class="source-header" onclick="toggleSourceContent(this)">
+                            <span class="source-name">${source}</span>
+                            <span class="source-status ${sourceData.success ? 'success' : 'error'}">
+                                ${sourceData.success ? 'OK' : 'Failed'}
+                            </span>
+                        </div>
+                        <div class="source-content collapsed">${JSON.stringify(sourceData.data, null, 2)}</div>
+                    </div>
+                `;
+            }
+            document.getElementById('raw-data-content').innerHTML = rawDataHtml;
+
+            // Decision Packet
+            document.getElementById('packet-json').textContent = JSON.stringify(data.decision_packet, null, 2);
+        }
+
+        function toggleRawData() {
+            const content = document.getElementById('raw-data-content');
+            const toggle = document.getElementById('raw-data-toggle');
+            content.classList.toggle('collapsed');
+            content.classList.toggle('expanded');
+            toggle.classList.toggle('rotated');
+        }
+
+        function togglePacket() {
+            const content = document.getElementById('packet-content');
+            const toggle = document.getElementById('packet-toggle');
+            content.classList.toggle('collapsed');
+            content.classList.toggle('expanded');
+            toggle.classList.toggle('rotated');
+        }
+
+        function toggleSourceContent(header) {
+            const content = header.nextElementSibling;
+            content.classList.toggle('collapsed');
+        }
+
+        function showStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = `status-message ${type}`;
+            statusMessage.classList.remove('hidden');
+        }
+
+        // Search airports function (from airports.js)
+        function searchAirports(query) {
+            if (typeof AIRPORTS === 'undefined') return [];
+            query = query.toLowerCase();
+            return AIRPORTS.filter(a =>
+                a.icao.toLowerCase().includes(query) ||
+                a.name.toLowerCase().includes(query) ||
+                a.city.toLowerCase().includes(query)
+            );
+        }
+    </script>
+</body>
+</html>
