@@ -206,43 +206,13 @@ else
 fi
 
 # ============================================================
-# Step 6: Check and run migrations
+# Step 6: Apply migrations (idempotent)
 # ============================================================
-print_step 6 "Checking database schema..."
+print_step 6 "Applying database migrations..."
 
-SCHEMA_STATUS=$(python3 << 'EOF'
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-load_dotenv(Path(".env"))
+echo "Running database migrations (safe to re-run)..."
 
-import psycopg2
-
-conn = psycopg2.connect(os.environ["DATABASE_URL"])
-cur = conn.cursor()
-
-# Check if core tables exist
-cur.execute("""
-    SELECT COUNT(*) FROM information_schema.tables
-    WHERE table_name IN ('node', 'edge', 'evidence', 'claim', 'case')
-""")
-count = cur.fetchone()[0]
-cur.close()
-conn.close()
-
-if count >= 5:
-    print("EXISTS")
-else:
-    print("MISSING")
-EOF
-)
-
-if [ "$SCHEMA_STATUS" == "EXISTS" ]; then
-    print_success "Database schema already exists"
-else
-    echo "Running database migrations..."
-
-    MIGRATE_RESULT=$(python3 << 'EOF'
+MIGRATE_RESULT=$(python3 << 'EOF'
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -265,17 +235,18 @@ migrations = [
 
 for migration in migrations:
     try:
-        with open(migration, 'r') as f:
+        with open(migration, "r") as f:
             sql = f.read()
         cur.execute(sql)
         print(f"OK:{migration}")
     except Exception as e:
-        # Some errors are OK (like "already exists")
-        error_str = str(e)
-        if "already exists" in error_str or "duplicate" in error_str.lower():
-            print(f"SKIP:{migration}")
+        # Migrations are written to be idempotent (IF NOT EXISTS / OR REPLACE).
+        # If a DB reports "already exists", we treat it as non-fatal and continue.
+        error_str = str(e).replace("\n", " ")
+        if "already exists" in error_str:
+            print(f"SKIP:{migration}:{type(e).__name__} {error_str[:400]}")
         else:
-            print(f"ERROR:{migration}:{error_str[:80]}")
+            print(f"ERROR:{migration}:{type(e).__name__} {error_str[:400]}")
 
 cur.close()
 conn.close()
@@ -283,28 +254,27 @@ print("DONE")
 EOF
 )
 
-    # Parse migration results
-    MIGRATION_FAILED=0
-    while IFS= read -r line; do
-        if [[ $line == OK:* ]]; then
-            MIGRATION_FILE="${line#OK:}"
-            print_success "Applied $(basename $MIGRATION_FILE)"
-        elif [[ $line == SKIP:* ]]; then
-            MIGRATION_FILE="${line#SKIP:}"
-            print_warning "Skipped $(basename $MIGRATION_FILE) (already applied)"
-        elif [[ $line == ERROR:* ]]; then
-            print_error "$line"
-            MIGRATION_FAILED=1
-        fi
-    done <<< "$MIGRATE_RESULT"
-
-    if [ $MIGRATION_FAILED -eq 1 ]; then
-        print_error "Some migrations failed. Check the errors above."
-        exit 1
+# Parse migration results
+MIGRATION_FAILED=0
+while IFS= read -r line; do
+    if [[ $line == OK:* ]]; then
+        MIGRATION_FILE="${line#OK:}"
+        print_success "Applied $(basename $MIGRATION_FILE)"
+    elif [[ $line == SKIP:* ]]; then
+        MIGRATION_FILE="${line#SKIP:}"
+        print_warning "Skipped $(basename $MIGRATION_FILE) (already exists)"
+    elif [[ $line == ERROR:* ]]; then
+        print_error "$line"
+        MIGRATION_FAILED=1
     fi
+done <<< "$MIGRATE_RESULT"
 
-    print_success "Database migrations complete"
+if [ $MIGRATION_FAILED -eq 1 ]; then
+    print_error "Some migrations failed. Check the errors above."
+    exit 1
 fi
+
+print_success "Database migrations complete"
 
 # ============================================================
 # Step 7: Create directories

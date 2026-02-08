@@ -7,7 +7,7 @@ Agentic Air Logistics Control Plane ingests real disruption signals (FAA NAS sta
 - `HOLD` — pause tendering until evidence clears
 - `ESCALATE` — route to a duty manager
 
-## Why this is interesting (recruiter-grade signals)
+## Why this is interesting
 
 - **Evidence binding enforced at the DB layer**: you can’t promote a claim/edge to `FACT` without linked evidence (trigger guardrail).
 - **Bi-temporal primitives + point-in-time queries**: edges/claims carry *event time* (`event_time_start/end`) and *ingest time* (`ingested_at`). The canonical predicate is in `app/graph/visibility.py`, and `POST /graph/bitemporal/beliefs` returns edges/claims/evidence visible “as-of” a given `(event_time, ingest_time)` for audit/debug.
@@ -42,8 +42,7 @@ Runtime (what actually runs) is the specialist-role machine:
 
 `INIT → INVESTIGATE → QUANTIFY_RISK → CRITIQUE → EVALUATE_POLICY → PLAN_ACTIONS → (DRAFT_COMMS) → EXECUTE → COMPLETE`
 
-## Multi-agent roles (specialists, not “one prompt”)
-
+## Multi-agent roles (specialists)
 - **Investigator**: gathers evidence + creates initial claims/edges
 - **RiskQuant**: LLM-assisted risk assessment with confidence breakdown
 - **Critic**: challenges evidence quality; can force reinvestigation
@@ -51,7 +50,7 @@ Runtime (what actually runs) is the specialist-role machine:
 - **Comms**: drafts notifications (internal/external)
 - **Executor**: executes approved actions and records outcomes
 
-## Tech stack (what you’re actually evaluating)
+## Tech stack
 
 - **API**: FastAPI + Pydantic v2
 - **DB**: Postgres + `pgvector` (HNSW/IVFFlat index with version-aware fallback)
@@ -83,12 +82,14 @@ There are **two different kinds of data** in this repo:
 The UI now exposes explicit controls:
 
 1. **Posture-only demo (no ops graph)**: Select airport → *Ingest Signals* → *Create Case* → *Run Agent*. You’ll get posture + evidence; the cascade section may be empty.
-2. **Cascade demo (seed ops graph)**: Select airport → *Seed Ops Graph* → *Create Case* → *Run Agent*. The cascade section will show flights/shipments/bookings and will label the source as `SIMULATION`.
+2. **Cascade demo (ops graph)**: Select airport → *Refresh Ops Graph* → *Create Case* → *Run Agent*. The cascade section will show flights/shipments/bookings and will label the source as `SIMULATION`.
 3. **Scenario demo**: `POST /simulation/run/<scenario_id>` runs a full canned scenario (and seeds ops data if missing).
 
-If you want a clean slate for one airport’s operational graph: *Clear Ops Graph* (or `DELETE /simulation/seed/airport/{ICAO}`).
+The built-in ops simulation intentionally uses a small set of major airports (see `simulation/operational_data.py`) to keep the demo graph lightweight; extend it if you want a larger network.
 
-## Key terms (so nothing is vague)
+If you want a clean slate for one airport’s operational graph: *Clear Ops Graph* (or `DELETE /simulation/seed/airport/{ICAO}`). *Refresh Ops Graph* clears existing `SIMULATION` ops data touching the selected airport before seeding so SLA times stay anchored near “now”.
+
+## Key terms
 
 - **Disruption**: any signal implying reduced or uncertain capacity at/around an airport (ground stop programs, severe alerts, forecast deterioration, traffic anomalies).
 - **Risk**: probability-weighted impact on commitments, expressed with a source-level confidence breakdown (what succeeded / failed / is missing).
@@ -100,20 +101,21 @@ If you want a clean slate for one airport’s operational graph: *Clear Ops Grap
 
 ![Bi-temporal model](docs/images/bitemporal.svg)
 
-## “Knows what it doesn’t know” (concretely)
+## “Knows what it doesn’t know”
 
 1. **Missing evidence is first-class state** (`missing_evidence_request`) instead of hand-waving uncertainty.
    - `BLOCKING` missing evidence causes the case to complete as `BLOCKED` (packet includes what’s missing and why).
    - Once evidence arrives, requests are automatically marked resolved; re-run the case to generate an updated packet.
 2. **FACT requires evidence**: DB triggers reject “FACT without evidence” promotions.
 
-## Run options (all of them)
+## Run options
 
 Prereqs: Python 3.11+ and Postgres with `pgvector`. This is not “Supabase vs local” — it’s **just Postgres** via `DATABASE_URL`.
 
 ### Option A: One-command setup (recommended)
 
 This creates `.venv`, installs deps (including LLM client libs), validates DB connectivity, and runs migrations.
+Re-run it after pulling updates to apply any new migrations (it’s idempotent).
 
 ```bash
 cp .env.example .env
@@ -211,7 +213,7 @@ curl http://localhost:8000/simulation/validate
 Operational graph seeding:
 
 ```bash
-curl -X POST http://localhost:8000/simulation/seed/airport/KJFK
+curl -X POST http://localhost:8000/simulation/seed/airport/KJFK   # refresh=true (default)
 curl http://localhost:8000/simulation/graph/operational-stats
 ```
 
@@ -231,15 +233,6 @@ pytest tests/test_security.py tests/test_agent_non_workflow.py -v -m "not requir
 # Full suite (requires a test DB)
 pytest tests/ -v
 ```
-
-## Why evidence is hash-addressed (answer to “why not store normally?”)
-
-Storing evidence by SHA‑256 of the bytes is basically “git for payloads”:
-
-- **Immutability + auditability**: a claim can cite an evidence hash; you can always retrieve and verify the exact bytes that justified a FACT.
-- **Deduplication**: identical payloads collapse to one file automatically (no repeated blobs).
-- **Tamper evidence**: if bytes change, the hash changes — silent overwrite becomes obvious.
-- **Safe file paths**: the hash is a constrained filename, which helps prevent path traversal.
 
 You *can* store evidence by UUID/timestamp, but then you must build separate mechanisms for dedup, immutability guarantees, and stable byte-identities for binding.
 

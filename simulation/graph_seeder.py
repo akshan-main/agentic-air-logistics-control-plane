@@ -23,7 +23,7 @@ Edge types:
 
 import json
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
@@ -42,6 +42,33 @@ from .operational_data import (
     SimulatedBooking,
     SimulatedDocument,
 )
+
+def _execute_values(
+    session: Session,
+    sql: str,
+    rows: List[Tuple[Any, ...]],
+    template: str,
+    page_size: int = 1000,
+) -> None:
+    """
+    Execute a VALUES bulk insert efficiently using psycopg2's execute_values.
+
+    This runs on the Session's underlying DBAPI connection so it participates
+    in the current transaction.
+    """
+    if not rows:
+        return
+
+    try:
+        from psycopg2.extras import execute_values  # type: ignore[import-not-found]
+    except Exception as e:  # pragma: no cover - psycopg2-binary is a hard dependency
+        raise RuntimeError("psycopg2 is required for bulk SIMULATION seeding") from e
+
+    connection = session.connection()
+    dbapi_connection = connection.connection
+
+    with dbapi_connection.cursor() as cursor:
+        execute_values(cursor, sql, rows, template=template, page_size=page_size)
 
 
 class GraphSeeder:
@@ -65,7 +92,10 @@ class GraphSeeder:
         self,
         airport_icao: str,
         num_flights: int = 20,
-        shipments_per_flight: int = 5
+        shipments_per_flight: int = 5,
+        *,
+        bulk: bool = True,
+        commit: bool = True,
     ) -> Dict[str, Any]:
         """
         Seed graph with operational data for an airport.
@@ -78,60 +108,550 @@ class GraphSeeder:
         Returns:
             Summary of seeded data
         """
-        airport_icao = airport_icao.upper()
+        if bulk:
+            return self._seed_airport_bulk(
+                airport_icao=airport_icao,
+                num_flights=num_flights,
+                shipments_per_flight=shipments_per_flight,
+                commit=commit,
+            )
 
-        # Generate operational data (deterministic by default)
+        # Fallback row-by-row implementation (debug-friendly, slower).
+        airport_icao = airport_icao.upper()
+        seeded_at = datetime.now(timezone.utc)
+
         seed_used = self.seed if self.seed is not None else default_operational_seed_for_airport(airport_icao)
         generator = OperationalDataGenerator(seed=seed_used)
         data = generator.generate_full_dataset_for_airport(
             airport_icao,
             num_flights=num_flights,
-            shipments_per_flight=shipments_per_flight
+            shipments_per_flight=shipments_per_flight,
         )
 
-        # Ensure airport node exists
-        airport_node = self._ensure_airport_node(airport_icao)
+        try:
+            # Ensure airport node exists
+            self._ensure_airport_node(airport_icao)
 
-        # Create carrier nodes
-        carrier_nodes = self._create_carrier_nodes(data["carriers"])
+            # Create carrier nodes
+            carrier_nodes = self._create_carrier_nodes(data["carriers"])
 
-        # Create flight nodes and edges
-        flight_nodes = self._create_flight_nodes_and_edges(
-            data["flights"],
-            carrier_nodes
+            # Create flight nodes and edges
+            flight_nodes = self._create_flight_nodes_and_edges(
+                data["flights"],
+                carrier_nodes,
+                seeded_at=seeded_at,
+            )
+
+            # Create shipment nodes and edges
+            shipment_nodes = self._create_shipment_nodes_and_edges(
+                data["shipments"],
+                flight_nodes,
+            )
+
+            # Create booking nodes and edges (CRITICAL for shipment actions)
+            booking_nodes = self._create_booking_nodes_and_edges(
+                data["bookings"],
+                shipment_nodes,
+                carrier_nodes,
+            )
+
+            # Create document nodes and edges
+            document_nodes = self._create_document_nodes_and_edges(
+                data["documents"],
+                shipment_nodes,
+            )
+
+            if commit:
+                self.graph.session.commit()
+
+            return {
+                "airport": airport_icao,
+                "seed_used": seed_used,
+                "nodes_created": {
+                    "carriers": len(carrier_nodes),
+                    "flights": len(flight_nodes),
+                    "shipments": len(shipment_nodes),
+                    "bookings": len(booking_nodes),
+                    "documents": len(document_nodes),
+                },
+                "stats": data["stats"],
+            }
+        except Exception:
+            self.graph.session.rollback()
+            raise
+
+    def _seed_airport_bulk(
+        self,
+        airport_icao: str,
+        num_flights: int,
+        shipments_per_flight: int,
+        *,
+        commit: bool,
+    ) -> Dict[str, Any]:
+        """
+        Fast SIMULATION seeding path.
+
+        Uses a single transaction + bulk inserts to avoid thousands of roundtrips
+        (critical for remote Postgres like Supabase).
+        """
+        airport_icao = airport_icao.upper()
+        seeded_at = datetime.now(timezone.utc)
+
+        seed_used = self.seed if self.seed is not None else default_operational_seed_for_airport(airport_icao)
+        generator = OperationalDataGenerator(seed=seed_used)
+        data = generator.generate_full_dataset_for_airport(
+            airport_icao,
+            num_flights=num_flights,
+            shipments_per_flight=shipments_per_flight,
         )
 
-        # Create shipment nodes and edges
-        shipment_nodes = self._create_shipment_nodes_and_edges(
-            data["shipments"],
-            flight_nodes
-        )
+        flights: List[SimulatedFlight] = data["flights"]
+        shipments: List[SimulatedShipment] = data["shipments"]
+        bookings: List[SimulatedBooking] = data["bookings"]
+        documents: List[SimulatedDocument] = data["documents"]
+        carriers: List[SimulatedCarrier] = data["carriers"]
 
-        # Create booking nodes and edges (CRITICAL for shipment actions)
-        booking_nodes = self._create_booking_nodes_and_edges(
-            data["bookings"],
-            shipment_nodes,
-            carrier_nodes
-        )
+        carrier_by_id: Dict[str, SimulatedCarrier] = {c.id: c for c in carriers}
 
-        # Create document nodes and edges
-        document_nodes = self._create_document_nodes_and_edges(
-            data["documents"],
-            shipment_nodes
-        )
+        # Airports referenced by the operational dataset (flights + shipments)
+        airport_icaos: set[str] = {airport_icao}
+        airport_icaos.update({f.origin_icao.upper() for f in flights})
+        airport_icaos.update({f.destination_icao.upper() for f in flights})
+        airport_icaos.update({s.origin_icao.upper() for s in shipments})
+        airport_icaos.update({s.destination_icao.upper() for s in shipments})
 
-        return {
-            "airport": airport_icao,
-            "seed_used": seed_used,
-            "nodes_created": {
-                "carriers": len(carrier_nodes),
-                "flights": len(flight_nodes),
-                "shipments": len(shipment_nodes),
-                "bookings": len(booking_nodes),
-                "documents": len(document_nodes),
-            },
-            "stats": data["stats"],
-        }
+        carrier_ids: set[str] = {c.id for c in carriers}
+
+        session = self.graph.session
+
+        try:
+            # Resolve existing AIRPORT/CARRIER node IDs (avoid unique conflicts).
+            airports_existing = session.execute(
+                text("""
+                    SELECT id, identifier
+                    FROM node
+                    WHERE type = 'AIRPORT'
+                      AND identifier = ANY(:ids)
+                """),
+                {"ids": sorted(airport_icaos)},
+            ).fetchall()
+            airport_node_ids: Dict[str, UUID] = {row[1]: row[0] for row in airports_existing}
+
+            carriers_existing = session.execute(
+                text("""
+                    SELECT id, identifier
+                    FROM node
+                    WHERE type = 'CARRIER'
+                      AND identifier = ANY(:ids)
+                """),
+                {"ids": sorted(carrier_ids)},
+            ).fetchall()
+            carrier_node_ids: Dict[str, UUID] = {row[1]: row[0] for row in carriers_existing}
+
+            node_rows: List[Tuple[Any, ...]] = []
+            node_version_rows: List[Tuple[Any, ...]] = []
+
+            # Create missing airport nodes
+            missing_airports = [icao for icao in sorted(airport_icaos) if icao not in airport_node_ids]
+            for icao in missing_airports:
+                node_id = uuid4()
+                airport_node_ids[icao] = node_id
+                node_rows.append((node_id, "AIRPORT", icao, seeded_at))
+                node_version_rows.append((uuid4(), node_id, json.dumps({"icao": icao}), seeded_at, seeded_at))
+
+            # Create missing carrier nodes
+            missing_carriers = [cid for cid in sorted(carrier_ids) if cid not in carrier_node_ids]
+            for cid in missing_carriers:
+                carrier = carrier_by_id[cid]
+                node_id = uuid4()
+                carrier_node_ids[cid] = node_id
+                node_rows.append((node_id, "CARRIER", cid, seeded_at))
+                node_version_rows.append((
+                    uuid4(),
+                    node_id,
+                    json.dumps(
+                        {
+                            "name": carrier.name,
+                            "iata_code": carrier.iata_code,
+                            "hub_airports": carrier.hub_airports,
+                        }
+                    ),
+                    seeded_at,
+                    seeded_at,
+                ))
+
+            # Create FLIGHT nodes
+            flight_node_ids: Dict[str, UUID] = {}
+            for flight in flights:
+                node_id = uuid4()
+                flight_node_ids[flight.id] = node_id
+                node_rows.append((node_id, "FLIGHT", flight.id, seeded_at))
+                node_version_rows.append((
+                    uuid4(),
+                    node_id,
+                    json.dumps(
+                        {
+                            "flight_number": flight.flight_number,
+                            "carrier_id": flight.carrier_id,
+                            "origin": flight.origin_icao,
+                            "destination": flight.destination_icao,
+                            "scheduled_departure": flight.scheduled_departure.isoformat(),
+                            "scheduled_arrival": flight.scheduled_arrival.isoformat(),
+                            "status": flight.status,
+                            "aircraft_type": flight.aircraft_type,
+                        }
+                    ),
+                    seeded_at,
+                    seeded_at,
+                ))
+
+            # Create SHIPMENT nodes
+            shipment_node_ids: Dict[str, UUID] = {}
+            for shipment in shipments:
+                node_id = uuid4()
+                shipment_node_ids[shipment.id] = node_id
+                node_rows.append((node_id, "SHIPMENT", shipment.id, seeded_at))
+                node_version_rows.append((
+                    uuid4(),
+                    node_id,
+                    json.dumps(
+                        {
+                            "tracking_number": shipment.tracking_number,
+                            "flight_id": shipment.flight_id,
+                            "origin": shipment.origin_icao,
+                            "destination": shipment.destination_icao,
+                            "weight_kg": shipment.weight_kg,
+                            "pieces": shipment.pieces,
+                            "commodity": shipment.commodity,
+                            "shipper": shipment.shipper,
+                            "consignee": shipment.consignee,
+                            "service_level": shipment.service_level,
+                            "status": shipment.status,
+                        }
+                    ),
+                    seeded_at,
+                    seeded_at,
+                ))
+
+            # Create BOOKING nodes + evidence rows
+            booking_node_ids: Dict[str, UUID] = {}
+            evidence_rows: List[Tuple[Any, ...]] = []
+
+            for booking in bookings:
+                booking_attrs = {
+                    "booking_reference": booking.booking_reference,
+                    "shipment_id": booking.shipment_id,
+                    "flight_id": booking.flight_id,
+                    "carrier_id": booking.carrier_id,
+                    "booked_at": booking.booked_at.isoformat(),
+                    "customer_id": booking.customer_id,
+                    "sla_deadline": booking.sla_deadline.isoformat(),
+                    "rate_type": booking.rate_type,
+                    "rate_per_kg": booking.rate_per_kg,
+                    "total_charge_usd": booking.total_charge_usd,
+                    "margin_percent": booking.margin_percent,
+                }
+
+                node_id = uuid4()
+                booking_node_ids[booking.id] = node_id
+                node_rows.append((node_id, "BOOKING", booking.id, seeded_at))
+                node_version_rows.append((uuid4(), node_id, json.dumps(booking_attrs), seeded_at, seeded_at))
+
+                raw_bytes = json.dumps(
+                    {"source": "BOOKING", "booking_id": booking.id, **booking_attrs},
+                    default=str,
+                ).encode("utf-8")
+                sha256 = store_evidence(raw_bytes)
+                excerpt = extract_excerpt(raw_bytes)
+                source_ref = f"booking:{booking.id}"
+
+                evidence_rows.append((
+                    uuid4(),
+                    "BOOKING",
+                    source_ref,
+                    booking.booked_at,
+                    "application/json",
+                    sha256,
+                    str(EVIDENCE_ROOT / f"{sha256}.bin"),
+                    excerpt,
+                    json.dumps(
+                        {
+                            "booking_reference": booking.booking_reference,
+                            "shipment_id": booking.shipment_id,
+                        }
+                    ),
+                ))
+
+            # Create DOCUMENT nodes
+            document_node_ids: Dict[str, UUID] = {}
+            for doc in documents:
+                node_id = uuid4()
+                document_node_ids[doc.id] = node_id
+                node_rows.append((node_id, "DOCUMENT", doc.id, seeded_at))
+
+                attrs: Dict[str, Any] = {
+                    "document_type": doc.document_type,
+                    "document_number": doc.document_number,
+                    "shipment_id": doc.shipment_id,
+                    "issued_at": doc.issued_at.isoformat(),
+                    "status": doc.status,
+                }
+                if doc.deadline:
+                    attrs["deadline"] = doc.deadline.isoformat()
+
+                node_version_rows.append((uuid4(), node_id, json.dumps(attrs), seeded_at, seeded_at))
+
+            # Bulk insert nodes + node_versions
+            if node_rows:
+                _execute_values(
+                    session,
+                    "INSERT INTO node (id, type, identifier, created_at) VALUES %s",
+                    node_rows,
+                    template="(%s, %s, %s, %s)",
+                    page_size=1000,
+                )
+            if node_version_rows:
+                _execute_values(
+                    session,
+                    "INSERT INTO node_version (id, node_id, attrs, valid_from, created_at) VALUES %s",
+                    node_version_rows,
+                    template="(%s, %s, %s::jsonb, %s, %s)",
+                    page_size=1000,
+                )
+
+            # Build edges (UUIDs are generated client-side for speed)
+            edge_rows: List[Tuple[Any, ...]] = []
+
+            for flight in flights:
+                flight_node_id = flight_node_ids[flight.id]
+                origin_id = airport_node_ids[flight.origin_icao.upper()]
+                dest_id = airport_node_ids[flight.destination_icao.upper()]
+
+                # FLIGHT_DEPARTS_FROM / FLIGHT_ARRIVES_AT: schedule relationship known at seed time
+                edge_rows.append((
+                    uuid4(),
+                    flight_node_id,
+                    origin_id,
+                    "FLIGHT_DEPARTS_FROM",
+                    json.dumps({"scheduled_departure": flight.scheduled_departure.isoformat()}),
+                    "DRAFT",
+                    seeded_at,
+                    None,
+                    seeded_at,
+                    None,
+                    None,
+                    "SIMULATION",
+                    1.0,
+                ))
+                edge_rows.append((
+                    uuid4(),
+                    flight_node_id,
+                    dest_id,
+                    "FLIGHT_ARRIVES_AT",
+                    json.dumps({"scheduled_arrival": flight.scheduled_arrival.isoformat()}),
+                    "DRAFT",
+                    seeded_at,
+                    None,
+                    seeded_at,
+                    None,
+                    None,
+                    "SIMULATION",
+                    1.0,
+                ))
+
+                carrier_id = carrier_node_ids.get(flight.carrier_id)
+                if carrier_id:
+                    edge_rows.append((
+                        uuid4(),
+                        carrier_id,
+                        flight_node_id,
+                        "CARRIER_OPERATES_FLIGHT",
+                        json.dumps({"flight_number": flight.flight_number}),
+                        "DRAFT",
+                        None,
+                        None,
+                        seeded_at,
+                        None,
+                        None,
+                        "SIMULATION",
+                        1.0,
+                    ))
+
+            for shipment in shipments:
+                shipment_node_id = shipment_node_ids[shipment.id]
+
+                flight_node_id = flight_node_ids.get(shipment.flight_id)
+                if flight_node_id:
+                    edge_rows.append((
+                        uuid4(),
+                        shipment_node_id,
+                        flight_node_id,
+                        "SHIPMENT_ON_FLIGHT",
+                        json.dumps({"weight_kg": shipment.weight_kg, "pieces": shipment.pieces}),
+                        "DRAFT",
+                        None,
+                        None,
+                        seeded_at,
+                        None,
+                        None,
+                        "SIMULATION",
+                        1.0,
+                    ))
+
+                origin_id = airport_node_ids[shipment.origin_icao.upper()]
+                dest_id = airport_node_ids[shipment.destination_icao.upper()]
+                edge_rows.append((
+                    uuid4(),
+                    shipment_node_id,
+                    origin_id,
+                    "SHIPMENT_ORIGIN",
+                    json.dumps({}),
+                    "DRAFT",
+                    None,
+                    None,
+                    seeded_at,
+                    None,
+                    None,
+                    "SIMULATION",
+                    1.0,
+                ))
+                edge_rows.append((
+                    uuid4(),
+                    shipment_node_id,
+                    dest_id,
+                    "SHIPMENT_DESTINATION",
+                    json.dumps({}),
+                    "DRAFT",
+                    None,
+                    None,
+                    seeded_at,
+                    None,
+                    None,
+                    "SIMULATION",
+                    1.0,
+                ))
+
+            for booking in bookings:
+                booking_node_id = booking_node_ids[booking.id]
+
+                shipment_node_id = shipment_node_ids.get(booking.shipment_id)
+                if shipment_node_id:
+                    edge_rows.append((
+                        uuid4(),
+                        booking_node_id,
+                        shipment_node_id,
+                        "BOOKING_FOR_SHIPMENT",
+                        json.dumps(
+                            {
+                                "total_charge_usd": booking.total_charge_usd,
+                                "sla_deadline": booking.sla_deadline.isoformat(),
+                            }
+                        ),
+                        "DRAFT",
+                        None,
+                        None,
+                        seeded_at,
+                        None,
+                        None,
+                        "SIMULATION",
+                        1.0,
+                    ))
+
+                carrier_node_id = carrier_node_ids.get(booking.carrier_id)
+                if carrier_node_id:
+                    edge_rows.append((
+                        uuid4(),
+                        booking_node_id,
+                        carrier_node_id,
+                        "BOOKING_WITH_CARRIER",
+                        json.dumps({"rate_type": booking.rate_type}),
+                        "DRAFT",
+                        None,
+                        None,
+                        seeded_at,
+                        None,
+                        None,
+                        "SIMULATION",
+                        1.0,
+                    ))
+
+            for doc in documents:
+                document_node_id = document_node_ids[doc.id]
+                shipment_node_id = shipment_node_ids.get(doc.shipment_id)
+                if shipment_node_id:
+                    edge_rows.append((
+                        uuid4(),
+                        document_node_id,
+                        shipment_node_id,
+                        "DOCUMENT_FOR_SHIPMENT",
+                        json.dumps({"document_type": doc.document_type, "status": doc.status}),
+                        "DRAFT",
+                        None,
+                        None,
+                        seeded_at,
+                        None,
+                        None,
+                        "SIMULATION",
+                        1.0,
+                    ))
+
+            if edge_rows:
+                _execute_values(
+                    session,
+                    """
+                    INSERT INTO edge
+                    (id, src, dst, type, attrs, status, event_time_start, event_time_end,
+                     ingested_at, valid_from, valid_to, source_system, confidence)
+                    VALUES %s
+                    """.strip(),
+                    edge_rows,
+                    template="(%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    page_size=1000,
+                )
+
+            # Bulk insert booking evidence rows (PolicyJudge requires source_system='BOOKING').
+            if evidence_rows:
+                try:
+                    _execute_values(
+                        session,
+                        """
+                        INSERT INTO evidence
+                        (id, source_system, source_ref, retrieved_at, content_type,
+                         payload_sha256, raw_path, excerpt, meta)
+                        VALUES %s
+                        ON CONFLICT (source_system, source_ref, payload_sha256) DO NOTHING
+                        """.strip(),
+                        evidence_rows,
+                        template="(%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)",
+                        page_size=1000,
+                    )
+                except Exception as e:
+                    msg = str(e)
+                    if "no unique or exclusion constraint matching the ON CONFLICT specification" in msg:
+                        raise RuntimeError(
+                            "Database schema is missing the evidence dedup constraint required for booking evidence upserts. "
+                            "Apply migrations: `./setup.sh` (idempotent) or `make migrate`."
+                        ) from e
+                    raise
+
+            if commit:
+                session.commit()
+
+            return {
+                "airport": airport_icao,
+                "seed_used": seed_used,
+                "nodes_created": {
+                    "carriers": len(carriers),
+                    "flights": len(flights),
+                    "shipments": len(shipments),
+                    "bookings": len(bookings),
+                    "documents": len(documents),
+                },
+                "stats": data["stats"],
+            }
+        except Exception:
+            session.rollback()
+            raise
 
     def _ensure_airport_node(self, icao: str) -> Node:
         """Get or create airport node."""
@@ -178,7 +698,8 @@ class GraphSeeder:
     def _create_flight_nodes_and_edges(
         self,
         flights: List[SimulatedFlight],
-        carrier_nodes: Dict[str, Node]
+        carrier_nodes: Dict[str, Node],
+        seeded_at: datetime,
     ) -> Dict[str, Node]:
         """Create flight nodes and edges to airports/carriers."""
         nodes = {}
@@ -226,7 +747,9 @@ class GraphSeeder:
                 },
                 status="DRAFT",  # Simulation data doesn't need evidence
                 confidence=1.0,
-                event_time_start=flight.scheduled_departure,
+                # This is a schedule relationship (known at seed time), not the actual departure event.
+                # Keeping event_time_start <= now ensures operational graph is visible for near-future planning.
+                event_time_start=seeded_at,
             )
 
             # Edge: FLIGHT_ARRIVES_AT (Flight -> Airport)
@@ -240,7 +763,7 @@ class GraphSeeder:
                 },
                 status="DRAFT",
                 confidence=1.0,
-                event_time_start=flight.scheduled_arrival,
+                event_time_start=seeded_at,
             )
 
             # Edge: CARRIER_OPERATES_FLIGHT (Carrier -> Flight)
@@ -475,8 +998,16 @@ class GraphSeeder:
                     }),
                 },
             )
-        except Exception:
-            pass  # ON CONFLICT handles duplicates; other errors are non-fatal for seeding
+        except Exception as e:
+            # If this fails, shipment-level actions will be blocked (PolicyJudge requires BOOKING evidence).
+            self.graph.session.rollback()
+            msg = str(e)
+            if "no unique or exclusion constraint matching the ON CONFLICT specification" in msg:
+                raise RuntimeError(
+                    "Database schema is missing the evidence dedup constraint required for booking evidence upserts. "
+                    "Apply migrations: `./setup.sh` (idempotent) or `make migrate`."
+                ) from e
+            raise
 
     def _create_document_nodes_and_edges(
         self,
@@ -558,6 +1089,8 @@ OPERATIONAL_NODE_TYPES = (
 def clear_seeded_operational_data_for_airport(
     airport_icao: str,
     session: Optional[Session] = None,
+    *,
+    commit: bool = True,
 ) -> Dict[str, Any]:
     """
     Clear SIMULATION-seeded operational graph data for a single airport.
@@ -709,7 +1242,8 @@ def clear_seeded_operational_data_for_airport(
                 {"ids": orphan_ids},
             )
 
-        session.commit()
+        if commit:
+            session.commit()
 
         return {
             "airport": airport_icao,
@@ -728,6 +1262,10 @@ def seed_graph_for_airport(
     num_flights: int = 20,
     shipments_per_flight: int = 5,
     seed: Optional[int] = None,
+    session: Optional[Session] = None,
+    *,
+    bulk: bool = True,
+    commit: bool = True,
 ) -> Dict[str, Any]:
     """
     Convenience function to seed graph for an airport.
@@ -740,9 +1278,24 @@ def seed_graph_for_airport(
     Returns:
         Summary of seeded data
     """
-    seeder = GraphSeeder(seed=seed)
-    return seeder.seed_airport(
-        airport_icao,
-        num_flights=num_flights,
-        shipments_per_flight=shipments_per_flight
-    )
+    from app.db.engine import SessionLocal
+
+    owns_session = session is None
+    if session is None:
+        session = SessionLocal()
+
+    try:
+        graph_store = GraphStore(session)
+        seeder = GraphSeeder(graph_store=graph_store, seed=seed)
+        # If we create the session, always commit so the data persists.
+        commit_effective = True if owns_session else commit
+        return seeder.seed_airport(
+            airport_icao,
+            num_flights=num_flights,
+            shipments_per_flight=shipments_per_flight,
+            bulk=bulk,
+            commit=commit_effective,
+        )
+    finally:
+        if owns_session:
+            session.close()

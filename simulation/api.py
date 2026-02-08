@@ -279,6 +279,7 @@ async def seed_operational_data(
     num_flights: int = 20,
     shipments_per_flight: int = 5,
     seed: Optional[int] = None,
+    refresh: bool = True,
 ) -> Dict[str, Any]:
     """
     Seed the context graph with simulated operational data for an airport.
@@ -297,6 +298,7 @@ async def seed_operational_data(
         airport_icao: Airport ICAO code (e.g., KJFK)
         num_flights: Number of flights to generate
         shipments_per_flight: Shipments per flight
+        refresh: If True, clears existing SIMULATION ops data touching this airport before seeding
 
     Returns:
         Summary of seeded data
@@ -310,15 +312,36 @@ async def seed_operational_data(
         )
 
     try:
-        result = seed_graph_for_airport(
-            airport_icao=airport_icao,
-            num_flights=num_flights,
-            shipments_per_flight=shipments_per_flight,
-            seed=seed,
-        )
+        from app.db.engine import session_scope
+
+        cleared: Optional[Dict[str, Any]] = None
+        result: Dict[str, Any]
+
+        # Refresh is atomic: if seeding fails, clear is rolled back.
+        with session_scope() as session:
+            if refresh:
+                cleared = clear_seeded_operational_data_for_airport(
+                    airport_icao,
+                    session=session,
+                    commit=False,
+                )
+            result = seed_graph_for_airport(
+                airport_icao=airport_icao,
+                num_flights=num_flights,
+                shipments_per_flight=shipments_per_flight,
+                seed=seed,
+                session=session,
+                commit=False,
+            )
         return {
             "status": "success",
-            "message": f"Seeded operational data for {airport_icao}",
+            "message": (
+                f"Refreshed operational data for {airport_icao}"
+                if refresh
+                else f"Seeded operational data for {airport_icao}"
+            ),
+            "refreshed": refresh,
+            "cleared": cleared,
             **result
         }
     except Exception as e:

@@ -13,6 +13,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 
 from ..db.engine import SessionLocal
 from ..ingestion.registry import get_registry
@@ -143,30 +144,44 @@ async def ingest_airport(
 
                 # Create evidence record (idempotent - skip if same source+ref+hash exists)
                 evidence_id = uuid4()
-                result = session.execute(
-                    text("""
-                        INSERT INTO evidence
-                        (id, source_system, source_ref, retrieved_at, content_type,
-                         payload_sha256, raw_path, excerpt, meta)
-                        VALUES
-                        (:id, :source_system, :source_ref, :retrieved_at, :content_type,
-                         :payload_sha256, :raw_path, :excerpt, CAST(:meta AS jsonb))
-                        ON CONFLICT (source_system, source_ref, payload_sha256) DO UPDATE
-                        SET retrieved_at = EXCLUDED.retrieved_at
-                        RETURNING id
-                    """),
-                    {
-                        "id": evidence_id,
-                        "source_system": ing_result.source,
-                        "source_ref": f"airport:{icao}",
-                        "retrieved_at": ing_result.retrieved_at,
-                        "content_type": "application/json",
-                        "payload_sha256": sha256,
-                        "raw_path": str(EVIDENCE_ROOT / f"{sha256}.bin"),
-                        "excerpt": excerpt,
-                        "meta": json.dumps({"airport_icao": icao}),
-                    }
-                )
+                try:
+                    result = session.execute(
+                        text("""
+                            INSERT INTO evidence
+                            (id, source_system, source_ref, retrieved_at, content_type,
+                             payload_sha256, raw_path, excerpt, meta)
+                            VALUES
+                            (:id, :source_system, :source_ref, :retrieved_at, :content_type,
+                             :payload_sha256, :raw_path, :excerpt, CAST(:meta AS jsonb))
+                            ON CONFLICT (source_system, source_ref, payload_sha256) DO UPDATE
+                            SET retrieved_at = EXCLUDED.retrieved_at
+                            RETURNING id
+                        """),
+                        {
+                            "id": evidence_id,
+                            "source_system": ing_result.source,
+                            "source_ref": f"airport:{icao}",
+                            "retrieved_at": ing_result.retrieved_at,
+                            "content_type": "application/json",
+                            "payload_sha256": sha256,
+                            "raw_path": str(EVIDENCE_ROOT / f"{sha256}.bin"),
+                            "excerpt": excerpt,
+                            "meta": json.dumps({"airport_icao": icao}),
+                        }
+                    )
+                except ProgrammingError as e:
+                    # Common failure mode when migrations weren't applied (missing unique index for ON CONFLICT).
+                    session.rollback()
+                    msg = str(getattr(e, "orig", e))
+                    if "no unique or exclusion constraint matching the ON CONFLICT specification" in msg:
+                        raise HTTPException(
+                            status_code=500,
+                            detail=(
+                                "Database schema is missing the evidence dedup constraint required for ingestion upserts. "
+                                "Apply migrations: `./setup.sh` (idempotent) or `make migrate`."
+                            ),
+                        )
+                    raise
                 # Use the actual ID (could be existing row on conflict)
                 row = result.fetchone()
                 if row:

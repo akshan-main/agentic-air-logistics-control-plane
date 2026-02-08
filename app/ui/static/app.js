@@ -278,16 +278,21 @@ async function handleSeedOps() {
     const airport = selectedAirport.icao;
     if (btnSeedOps) {
         btnSeedOps.disabled = true;
-        btnSeedOps.textContent = 'Seeding...';
+        btnSeedOps.textContent = 'Refreshing...';
     }
-    showStatus(`Seeding simulated operational graph for ${airport}...`, 'info');
+    showStatus(`Refreshing SIMULATION ops graph for ${airport} (clear + seed)...`, 'info');
 
     try {
-        const result = await apiCall(`/simulation/seed/airport/${airport}`, 'POST');
+        const result = await apiCall(`/simulation/seed/airport/${airport}?refresh=true`, 'POST');
         const nodes = result.nodes_created || {};
+        const cleared = result.cleared || null;
+        const clearedMsg = cleared
+            ? ` Cleared edges=${cleared.edges_deleted || 0}, nodes=${cleared.nodes_deleted || 0}.`
+            : '';
         showStatus(
-            `Seeded ops graph for ${airport} (seed=${result.seed_used}). ` +
-            `Flights=${nodes.flights || 0}, Shipments=${nodes.shipments || 0}, Bookings=${nodes.bookings || 0}.`,
+            `Refreshed ops graph for ${airport} (seed=${result.seed_used}). ` +
+            `Flights=${nodes.flights || 0}, Shipments=${nodes.shipments || 0}, Bookings=${nodes.bookings || 0}.` +
+            clearedMsg,
             'success'
         );
         await loadOpsStats();
@@ -295,7 +300,7 @@ async function handleSeedOps() {
         showStatus(`Operational seeding failed: ${e.message || e}`, 'error');
     } finally {
         if (btnSeedOps) {
-            btnSeedOps.textContent = 'Seed Ops Graph';
+            btnSeedOps.textContent = 'Refresh Ops Graph';
             btnSeedOps.disabled = false;
         }
         updateButtonStates();
@@ -1193,7 +1198,7 @@ function renderCascadeImpact(impact) {
                 <!-- SLA Exposure (Deadline-based, not "at risk") -->
                 <div style="margin-bottom: 16px;">
                     <div style="font-weight: 600; margin-bottom: 4px; color: #dc3545;">SLA Deadline Exposure</div>
-                    <div style="font-size: 0.75rem; color: #888; margin-bottom: 8px;">Shipments with SLA deadlines within 24 hours. OVERDUE = penalty exposure is active. These drive the urgency of the posture decision.</div>
+                    <div style="font-size: 0.75rem; color: #888; margin-bottom: 8px;">Shipments with SLA deadlines within 24 hours (simulated). OVERDUE = penalty exposure is active. If everything is OVERDUE, click “Refresh Ops Graph”.</div>
                     <div style="display: grid; gap: 6px;">
                         ${sla_exposure.map(s => `
                             <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(220, 53, 69, 0.1); border-radius: 4px; border-left: 3px solid #dc3545;">
@@ -1283,7 +1288,7 @@ function renderBitemporalSection(bitemporal) {
         <div style="margin-bottom: 16px; padding: 12px; background: rgba(138, 43, 226, 0.1); border-radius: 8px; border: 1px solid rgba(138, 43, 226, 0.2);">
             <div style="font-weight: 600; margin-bottom: 8px; color: #8a2be2;">⏱️ Bi-Temporal Graph</div>
             <div style="font-size: 0.75rem; color: #888; margin-bottom: 12px;">
-                Event Time (when it happened) vs Ingest Time (when we learned it)
+                Event Time (when it was/will be true) vs Ingest Time (when we learned it)
             </div>
 
             ${temporal_edges.length > 0 ? `

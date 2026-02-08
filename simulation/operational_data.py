@@ -161,6 +161,20 @@ class OperationalDataGenerator:
             base_time = datetime.now(timezone.utc)
 
         flights = []
+        # For a more realistic demo, generate some flights slightly in the past so:
+        # - there are always in-flight/arrived legs,
+        # - SLA deadlines aren't uniformly far in the future,
+        # - the UI shows a mix of "imminent" vs "safe" exposure.
+        schedule_window_start_hours = -6
+        schedule_window_end_hours = 24
+
+        def derive_status(departure_time: datetime, arrival_time: datetime) -> str:
+            if arrival_time <= base_time:
+                # Already landed (or should have)
+                return self.rng.choice(["ARRIVED", "ARRIVED", "ARRIVED", "DELAYED"])
+            if departure_time <= base_time < arrival_time:
+                return self.rng.choice(["IN_FLIGHT", "IN_FLIGHT", "DELAYED"])
+            return self.rng.choice(["SCHEDULED", "SCHEDULED", "DELAYED"])
 
         # Major US airports for connections
         major_airports = [
@@ -174,7 +188,7 @@ class OperationalDataGenerator:
             carrier = self.rng.choice(self.carriers)
             dest = self.rng.choice(destinations)
 
-            departure = base_time + timedelta(hours=self.rng.uniform(0, 24))
+            departure = base_time + timedelta(hours=self.rng.uniform(schedule_window_start_hours, schedule_window_end_hours))
             flight_hours = self.rng.uniform(1, 6)
             arrival = departure + timedelta(hours=flight_hours)
 
@@ -186,7 +200,7 @@ class OperationalDataGenerator:
                 destination_icao=dest,
                 scheduled_departure=departure,
                 scheduled_arrival=arrival,
-                status=self.rng.choice(["SCHEDULED", "SCHEDULED", "DELAYED"]),
+                status=derive_status(departure, arrival),
                 aircraft_type=self.rng.choice(["B777F", "B747F", "B767F", "A330F", "MD11F"])
             )
             flights.append(flight)
@@ -196,7 +210,7 @@ class OperationalDataGenerator:
             carrier = self.rng.choice(self.carriers)
             origin = self.rng.choice(destinations)
 
-            arrival = base_time + timedelta(hours=self.rng.uniform(0, 24))
+            arrival = base_time + timedelta(hours=self.rng.uniform(schedule_window_start_hours, schedule_window_end_hours))
             flight_hours = self.rng.uniform(1, 6)
             departure = arrival - timedelta(hours=flight_hours)
 
@@ -208,7 +222,7 @@ class OperationalDataGenerator:
                 destination_icao=airport_icao,
                 scheduled_departure=departure,
                 scheduled_arrival=arrival,
-                status=self.rng.choice(["SCHEDULED", "IN_FLIGHT", "ARRIVED"]),
+                status=derive_status(departure, arrival),
                 aircraft_type=self.rng.choice(["B777F", "B747F", "B767F", "A330F", "MD11F"])
             )
             flights.append(flight)

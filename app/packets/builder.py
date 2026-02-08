@@ -753,7 +753,7 @@ class DecisionPacketBuilder:
 
             # 5. Get bi-temporal edge timeline (event time vs ingest time)
             bitemporal_edges = self.session.execute(
-                text("""
+                text(f"""
                     SELECT
                         e.type,
                         e.event_time_start,
@@ -767,10 +767,12 @@ class DecisionPacketBuilder:
                     JOIN node dst ON e.dst = dst.id
                     WHERE dst.type = 'AIRPORT' AND dst.identifier = :icao
                       AND (e.event_time_start IS NOT NULL OR e.valid_from IS NOT NULL)
+                      AND e.source_system <> 'SIMULATION'
+                      AND {edge_visibility}
                     ORDER BY e.ingested_at DESC
                     LIMIT 10
                 """),
-                {"icao": airport_icao}
+                {"icao": airport_icao, **visibility_params}
             )
             temporal_edges = [
                 {

@@ -641,6 +641,7 @@ class InvestigatorAgent:
         joining through the graph: EVIDENCE(meta.shipment_id) -> SHIPMENT -> FLIGHT -> AIRPORT.
         """
         from ...db.engine import get_next_trace_seq
+        from uuid import uuid4
 
         # Find booking evidence relevant to this airport and not yet linked to this case.
         # IMPORTANT: Do not blindly link "all booking evidence" — it creates confusing packets.
