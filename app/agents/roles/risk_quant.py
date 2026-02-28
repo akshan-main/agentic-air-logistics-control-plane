@@ -13,7 +13,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ..state_graph import BeliefState, Posture
+from ..state_graph import BeliefState
 from ...llm import get_llm_client
 
 
@@ -142,7 +142,6 @@ class RiskQuantAgent:
         """Store risk assessment in trace_event for packet retrieval."""
         from uuid import uuid4
         from datetime import datetime, timezone
-        import json
         from ...db.engine import get_next_trace_seq
 
         seq = get_next_trace_seq(self.case_id, self.session)
@@ -179,7 +178,6 @@ class RiskQuantAgent:
         """Create claims from the LLM risk assessment."""
         from uuid import uuid4
         from datetime import datetime, timezone
-        import json
 
         # Clear existing risk assessment claims to prevent duplicates on re-assessment
         # This happens when critic forces re-investigation and risk_quant runs again
@@ -370,7 +368,7 @@ class RiskQuantAgent:
                 "premium_sla_at_risk": cascade.premium_sla_at_risk,
                 "express_sla_at_risk": cascade.express_sla_at_risk,
             }
-        except Exception as e:
+        except Exception:
             # Log but don't fail - cascade is enhancement, not required
             return None
 

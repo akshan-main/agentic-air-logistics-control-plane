@@ -5,9 +5,7 @@ Test replay learning and playbook reuse.
 Verifies the replay gate: After 3 cases, 4th must retrieve playbook.
 """
 
-import pytest
 from uuid import uuid4
-from datetime import datetime, timezone
 from sqlalchemy import text
 
 from app.replay.playbooks import PlaybookManager
@@ -274,7 +272,7 @@ class TestPlaybookEvaluation:
             success=True,
         )
 
-        assert result["success"] == True
+        assert result["success"] is True
         assert "action_match" in result
         assert result["action_match"]["score"] < 1.0  # Partial match
 

@@ -4,7 +4,6 @@ Policy evaluation engine.
 """
 
 from typing import List, Dict, Any, Optional, Tuple
-from uuid import UUID
 from datetime import datetime, timezone
 
 from sqlalchemy import text

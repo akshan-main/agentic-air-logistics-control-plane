@@ -289,10 +289,11 @@ async function handleSeedOps() {
         const clearedMsg = cleared
             ? ` Cleared edges=${cleared.edges_deleted || 0}, nodes=${cleared.nodes_deleted || 0}.`
             : '';
+        const hint = selectedCaseId ? ' Re-run the agent to see updated SLA/booking data.' : '';
         showStatus(
-            `Refreshed ops graph for ${airport} (seed=${result.seed_used}). ` +
+            `Refreshed ops graph for ${airport}. ` +
             `Flights=${nodes.flights || 0}, Shipments=${nodes.shipments || 0}, Bookings=${nodes.bookings || 0}.` +
-            clearedMsg,
+            clearedMsg + hint,
             'success'
         );
         await loadOpsStats();
@@ -323,7 +324,7 @@ async function handleClearOps() {
     try {
         const result = await apiCall(`/simulation/seed/airport/${airport}`, 'DELETE');
         showStatus(
-            `Cleared ops graph for ${airport}. Edges deleted=${result.edges_deleted || 0}, nodes deleted=${result.nodes_deleted || 0}.`,
+            `Cleared ops graph for ${airport}. Edges=${result.edges_deleted || 0}, nodes=${result.nodes_deleted || 0} deleted. Seed fresh data with "Refresh Ops Graph".`,
             'success'
         );
         await loadOpsStats();
@@ -471,12 +472,12 @@ function updateProgress(data) {
         step.className = 'progress-step';
 
         // Color based on state
-        let stateColor = '#58a6ff';
-        if (data.to_state === 'INVESTIGATE') stateColor = '#f0ad4e';
-        if (data.to_state === 'QUANTIFY_RISK') stateColor = '#dc3545';
-        if (data.to_state === 'CRITIQUE') stateColor = '#17a2b8';
-        if (data.to_state === 'EXECUTE') stateColor = '#6f42c1';
-        if (data.to_state === 'COMPLETE') stateColor = '#28a745';
+        let stateColor = '#4f46e5';
+        if (data.to_state === 'INVESTIGATE') stateColor = '#d97706';
+        if (data.to_state === 'QUANTIFY_RISK') stateColor = '#dc2626';
+        if (data.to_state === 'CRITIQUE') stateColor = '#0891b2';
+        if (data.to_state === 'EXECUTE') stateColor = '#7c3aed';
+        if (data.to_state === 'COMPLETE') stateColor = '#059669';
 
         step.innerHTML = `
             <div style="display: flex; align-items: flex-start; gap: 8px;">
@@ -484,10 +485,10 @@ function updateProgress(data) {
                 <div>
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <span class="step-state" style="color: ${stateColor}; font-weight: 600;">${data.to_state}</span>
-                        <span class="step-handler" style="color: #888; font-size: 0.75rem;">${data.handler}</span>
+                        <span class="step-handler" style="color: #6b7280; font-size: 0.75rem;">${data.handler}</span>
                     </div>
-                    ${data.description ? `<div style="color: #ccc; font-size: 0.8rem; margin-top: 2px;">${escapeHtml(data.description)}</div>` : ''}
-                    ${data.condition ? `<div style="color: #888; font-size: 0.7rem; margin-top: 2px;">When: ${data.condition}</div>` : ''}
+                    ${data.description ? `<div style="color: #4b5563; font-size: 0.8rem; margin-top: 2px;">${escapeHtml(data.description)}</div>` : ''}
+                    ${data.condition ? `<div style="color: #6b7280; font-size: 0.7rem; margin-top: 2px;">When: ${data.condition}</div>` : ''}
                 </div>
             </div>
         `;
@@ -499,7 +500,7 @@ function updateProgress(data) {
         // Update stats with description
         statsEl.innerHTML = `
             <div class="stat-item" style="grid-column: 1 / -1; margin-bottom: 8px;">
-                <span class="stat-value" style="font-size: 0.85rem; color: #e0e0e0;">${data.description || data.state}</span>
+                <span class="stat-value" style="font-size: 0.85rem; color: #111827;">${data.description || data.state}</span>
             </div>
             <div class="stat-item">
                 <span class="stat-label">State:</span>
@@ -520,7 +521,7 @@ function updateProgress(data) {
             ${data.risk_level ? `
             <div class="stat-item">
                 <span class="stat-label">Risk Level:</span>
-                <span class="stat-value" style="color: ${data.risk_level === 'HIGH' ? '#dc3545' : data.risk_level === 'MEDIUM' ? '#f0ad4e' : '#28a745'};">${data.risk_level}</span>
+                <span class="stat-value" style="color: ${data.risk_level === 'HIGH' ? '#dc2626' : data.risk_level === 'MEDIUM' ? '#d97706' : '#059669'};">${data.risk_level}</span>
             </div>
             ` : ''}
             ${data.recommended_posture ? `
@@ -541,9 +542,9 @@ function updateProgress(data) {
     if (data.event === 'started') {
         stepsEl.innerHTML = `
             <div class="progress-step">
-                <span class="step-arrow" style="color: #28a745;">●</span>
+                <span class="step-arrow" style="color: #059669;">●</span>
                 <span class="step-state">Started</span>
-                <span style="color: #888; font-size: 0.8rem; margin-left: 8px;">Initializing agent orchestration</span>
+                <span style="color: #6b7280; font-size: 0.8rem; margin-left: 8px;">Initializing agent orchestration</span>
             </div>
         `;
     }
@@ -552,8 +553,8 @@ function updateProgress(data) {
         const step = document.createElement('div');
         step.className = 'progress-step completed';
         step.innerHTML = `
-            <span class="step-arrow" style="color: #28a745;">✓</span>
-            <span class="step-state" style="color: #28a745; font-weight: 600;">COMPLETE</span>
+            <span class="step-arrow" style="color: #059669;">✓</span>
+            <span class="step-state" style="color: #059669; font-weight: 600;">COMPLETE</span>
             <span class="step-handler">${data.status}</span>
         `;
         stepsEl.appendChild(step);
@@ -592,6 +593,11 @@ function renderCasesList(cases) {
 async function selectCase(caseId) {
     selectedCaseId = caseId;
     updateButtonStates();
+
+    // Update playbook create button (defined later, guard for load order)
+    if (typeof updateCreatePlaybookButton === 'function') {
+        updateCreatePlaybookButton();
+    }
 
     // Update visual selection
     document.querySelectorAll('.case-item').forEach(el => {
@@ -722,16 +728,16 @@ function renderEvidence(evidence) {
     return evidence.map(e => {
         const parsed = parseEvidenceExcerpt(e.source_system, e.excerpt);
         return `
-            <div class="evidence-item" style="padding: 12px; margin: 6px 0; background: rgba(255,255,255,0.03); border-radius: 6px; border-left: 3px solid ${parsed.color};">
+            <div class="evidence-item" style="padding: 12px; margin: 6px 0; background: rgba(0,0,0,0.02); border-radius: 6px; border-left: 3px solid ${parsed.color};">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <span style="font-weight: 600; color: ${parsed.color}; font-size: 0.9rem;">${parsed.icon} ${e.source_system}</span>
-                    <span style="font-size: 0.75rem; color: #888;">${formatTimestamp(e.retrieved_at)}</span>
+                    <span style="font-size: 0.75rem; color: #6b7280;">${formatTimestamp(e.retrieved_at)}</span>
                 </div>
                 <div style="font-size: 0.85rem; line-height: 1.5;">${parsed.summary}</div>
                 ${parsed.details.length > 0 ? `
                     <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
                         ${parsed.details.map(d => `
-                            <span style="font-size: 0.75rem; padding: 2px 8px; background: rgba(255,255,255,0.06); border-radius: 4px; color: #aaa;">
+                            <span style="font-size: 0.75rem; padding: 2px 8px; background: rgba(0,0,0,0.03); border-radius: 4px; color: #4b5563;">
                                 ${escapeHtml(d)}
                             </span>
                         `).join('')}
@@ -743,7 +749,7 @@ function renderEvidence(evidence) {
 }
 
 function parseEvidenceExcerpt(source, excerpt) {
-    const result = { summary: '', details: [], color: '#58a6ff', icon: '' };
+    const result = { summary: '', details: [], color: '#4f46e5', icon: '' };
     if (!excerpt) return { ...result, summary: 'No data available' };
 
     let data;
@@ -757,19 +763,19 @@ function parseEvidenceExcerpt(source, excerpt) {
     // Handle arrays (e.g., NWS alerts)
     if (Array.isArray(data)) {
         if (data.length === 0) {
-            return { summary: 'No active alerts (normal conditions)', details: [], color: '#28a745', icon: '' };
+            return { summary: 'No active alerts (normal conditions)', details: [], color: '#059669', icon: '' };
         }
         const items = data.slice(0, 3).map(alert => {
             const severity = alert.severity || 'Unknown';
-            const sevColor = severity === 'Severe' ? '#dc3545' : severity === 'Moderate' ? '#ffc107' : '#28a745';
-            return `<div style="margin-bottom: 6px; padding: 6px 8px; background: rgba(255,255,255,0.03); border-radius: 4px;">
+            const sevColor = severity === 'Severe' ? '#dc2626' : severity === 'Moderate' ? '#d97706' : '#059669';
+            return `<div style="margin-bottom: 6px; padding: 6px 8px; background: rgba(0,0,0,0.02); border-radius: 4px;">
                 <span style="color: ${sevColor}; font-weight: 600;">${escapeHtml(alert.event || 'Alert')}</span>
-                <span style="color: #888; margin-left: 8px; font-size: 0.8rem;">${severity} / ${alert.certainty || ''}</span>
-                ${alert.headline ? `<div style="font-size: 0.8rem; color: #ccc; margin-top: 4px;">${escapeHtml(alert.headline.substring(0, 150))}</div>` : ''}
+                <span style="color: #6b7280; margin-left: 8px; font-size: 0.8rem;">${severity} / ${alert.certainty || ''}</span>
+                ${alert.headline ? `<div style="font-size: 0.8rem; color: #4b5563; margin-top: 4px;">${escapeHtml(alert.headline.substring(0, 150))}</div>` : ''}
             </div>`;
         });
-        const more = data.length > 3 ? `<div style="color: #888; font-size: 0.8rem;">+ ${data.length - 3} more alerts</div>` : '';
-        return { summary: items.join('') + more, details: [], color: '#ffc107', icon: '' };
+        const more = data.length > 3 ? `<div style="color: #6b7280; font-size: 0.8rem;">+ ${data.length - 3} more alerts</div>` : '';
+        return { summary: items.join('') + more, details: [], color: '#d97706', icon: '' };
     }
 
     // Handle status-based evidence (api_error, no_disruption, normal ops)
@@ -778,18 +784,18 @@ function parseEvidenceExcerpt(source, excerpt) {
             case 'normal_operations':
             case 'no_disruption':
                 result.icon = '';
-                result.color = '#28a745';
+                result.color = '#059669';
                 result.summary = escapeHtml(data.message || 'Normal operations — no disruptions');
                 break;
             case 'no_data':
                 result.icon = '';
-                result.color = '#6c757d';
+                result.color = '#6b7280';
                 result.summary = escapeHtml(data.message || 'No active data from this source');
                 break;
             case 'api_error':
             case 'not_fetched':
                 result.icon = '';
-                result.color = '#dc3545';
+                result.color = '#dc2626';
                 result.summary = escapeHtml(data.message || data.error || 'Failed to fetch from source');
                 break;
         }
@@ -801,7 +807,7 @@ function parseEvidenceExcerpt(source, excerpt) {
         case 'FAA_NAS': {
             const hasDisruption = data.delay || data.closure || data.ground_stop;
             result.icon = '';
-            result.color = hasDisruption ? '#dc3545' : '#28a745';
+            result.color = hasDisruption ? '#dc2626' : '#059669';
             if (hasDisruption) {
                 result.summary = 'Disruption detected';
                 if (data.delay) result.details.push(`Delay: ${data.delay}`);
@@ -822,7 +828,7 @@ function parseEvidenceExcerpt(source, excerpt) {
             const cat = data.flight_category;
 
             const isGood = (!vis || parseFloat(vis) >= 6) && (!wind || wind < 20);
-            result.color = isGood ? '#28a745' : '#ffc107';
+            result.color = isGood ? '#059669' : '#d97706';
 
             result.summary = data.raw_text
                 ? escapeHtml(data.raw_text)
@@ -837,7 +843,7 @@ function parseEvidenceExcerpt(source, excerpt) {
         }
         case 'TAF': {
             result.icon = '';
-            result.color = '#17a2b8';
+            result.color = '#0891b2';
             result.summary = data.raw_text
                 ? escapeHtml(data.raw_text)
                 : `Forecast for ${data.icao || ''}`;
@@ -847,13 +853,13 @@ function parseEvidenceExcerpt(source, excerpt) {
         }
         case 'NWS_ALERTS': {
             result.icon = '';
-            result.color = '#ffc107';
+            result.color = '#d97706';
             result.summary = 'See alerts above';
             break;
         }
         case 'OPENSKY': {
             result.icon = '';
-            result.color = '#6f42c1';
+            result.color = '#7c3aed';
             const states = data.states;
             if (Array.isArray(states)) {
                 result.summary = `${states.length} aircraft tracked in vicinity`;
@@ -875,15 +881,15 @@ function renderContradictions(contradictions) {
     if (!contradictions?.length) return '<p class="empty-state">No contradictions detected</p>';
 
     return contradictions.map(c => `
-        <div class="contradiction-item" style="padding: 10px; margin: 5px 0; background: rgba(255, 193, 7, 0.1); border-radius: 4px; border-left: 3px solid #ffc107;">
-            <div style="font-weight: 600; color: #856404;">
+        <div class="contradiction-item" style="padding: 10px; margin: 5px 0; background: rgba(217, 119, 6, 0.1); border-radius: 4px; border-left: 3px solid #d97706;">
+            <div style="font-weight: 600; color: #92400e;">
                 ${c.contradiction_type || 'Signal Mismatch'}
             </div>
             <div style="font-size: 0.85rem; margin-top: 4px;">
                 Claim A: ${c.claim_a_id?.substring(0, 8) || 'N/A'}... vs Claim B: ${c.claim_b_id?.substring(0, 8) || 'N/A'}...
             </div>
             <div style="font-size: 0.85rem; margin-top: 4px;">
-                Status: <span style="color: ${c.resolution_status === 'OPEN' ? '#dc3545' : '#28a745'}; font-weight: 500;">
+                Status: <span style="color: ${c.resolution_status === 'OPEN' ? '#dc2626' : '#059669'}; font-weight: 500;">
                     ${c.resolution_status || 'OPEN'}
                 </span>
             </div>
@@ -936,9 +942,9 @@ function renderPolicies(policies) {
 
     return policies.map(p => {
         const isBlocked = p.effect?.includes('BLOCKED');
-        const bgColor = isBlocked ? 'rgba(220, 53, 69, 0.1)' : 'rgba(40, 167, 69, 0.1)';
-        const borderColor = isBlocked ? '#dc3545' : '#28a745';
-        const effectColor = isBlocked ? '#dc3545' : '#28a745';
+        const bgColor = isBlocked ? 'rgba(220, 38, 38, 0.1)' : 'rgba(5, 150, 105, 0.1)';
+        const borderColor = isBlocked ? '#dc2626' : '#059669';
+        const effectColor = isBlocked ? '#dc2626' : '#059669';
 
         return `
             <div class="policy-item" style="padding: 10px; margin: 5px 0; background: ${bgColor}; border-radius: 4px; border-left: 3px solid ${borderColor};">
@@ -958,7 +964,7 @@ function renderWorkflowTrace(trace) {
     const stateEnters = trace.filter(t => t.event_type === 'STATE_ENTER');
 
     return `
-        <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 0.85rem; background: #1a1a2e; padding: 16px; border-radius: 8px;">
+        <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 0.85rem; background: #f4f5f7; padding: 16px; border-radius: 8px;">
             ${stateEnters.map((t, i) => {
                 const state = t.state || 'UNKNOWN';
                 const meta = t.meta || {};
@@ -966,12 +972,12 @@ function renderWorkflowTrace(trace) {
                 const description = meta.description || '';
 
                 // Determine color based on state
-                let color = '#58a6ff';  // Default blue
-                if (isLast) color = '#28a745';  // Green for final
-                if (state === 'INVESTIGATE') color = '#f0ad4e';  // Orange for investigation
-                if (state === 'QUANTIFY_RISK') color = '#dc3545';  // Red for risk
-                if (state === 'CRITIQUE') color = '#17a2b8';  // Cyan for critique
-                if (state === 'EXECUTE') color = '#6f42c1';  // Purple for execute
+                let color = '#4f46e5';  // Default blue
+                if (isLast) color = '#059669';  // Green for final
+                if (state === 'INVESTIGATE') color = '#d97706';  // Orange for investigation
+                if (state === 'QUANTIFY_RISK') color = '#dc2626';  // Red for risk
+                if (state === 'CRITIQUE') color = '#0891b2';  // Cyan for critique
+                if (state === 'EXECUTE') color = '#7c3aed';  // Purple for execute
 
                 // Build detail items from meta
                 const details = [];
@@ -990,13 +996,13 @@ function renderWorkflowTrace(trace) {
                         <div style="position: absolute; left: -7px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: ${color};"></div>
                         <div style="display: flex; align-items: center; margin-bottom: 4px;">
                             <span style="color: ${color}; font-weight: 600; font-size: 0.9rem;">${state}</span>
-                            ${meta.handler ? `<span style="color: #888; margin-left: 10px; font-size: 0.75rem; font-family: monospace;">→ ${meta.handler}</span>` : ''}
+                            ${meta.handler ? `<span style="color: #6b7280; margin-left: 10px; font-size: 0.75rem; font-family: monospace;">→ ${meta.handler}</span>` : ''}
                         </div>
-                        ${description ? `<div style="color: #e0e0e0; margin-bottom: 4px;">${escapeHtml(description)}</div>` : ''}
+                        ${description ? `<div style="color: #111827; margin-bottom: 4px;">${escapeHtml(description)}</div>` : ''}
                         ${details.length > 0 ? `
                             <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;">
                                 ${details.map(d => `
-                                    <span style="font-size: 0.75rem; padding: 2px 6px; background: rgba(255,255,255,0.1); border-radius: 3px; color: #aaa;">${d}</span>
+                                    <span style="font-size: 0.75rem; padding: 2px 6px; background: rgba(0,0,0,0.04); border-radius: 3px; color: #4b5563;">${d}</span>
                                 `).join('')}
                             </div>
                         ` : ''}
@@ -1016,7 +1022,7 @@ function renderConfidenceBreakdown(breakdown) {
 
     return `
         <div style="font-size: 0.9rem;">
-            <div style="margin-bottom: 10px; padding: 10px; background: rgba(88, 166, 255, 0.1); border-radius: 6px;">
+            <div style="margin-bottom: 10px; padding: 10px; background: rgba(79, 70, 229, 0.1); border-radius: 6px;">
                 <strong>Final Confidence:</strong> ${Math.round((breakdown.final || 0) * 100)}%
             </div>
 
@@ -1024,13 +1030,13 @@ function renderConfidenceBreakdown(breakdown) {
             <div style="display: grid; gap: 6px; margin-bottom: 12px;">
                 ${Object.entries(sources).map(([source, value]) => {
                     const isMissing = value === 'missing';
-                    const color = isMissing ? '#dc3545' : '#28a745';
+                    const color = isMissing ? '#dc2626' : '#059669';
                     const icon = isMissing ? '✗' : '✓';
                     return `
-                        <div style="display: flex; align-items: center; padding: 6px 10px; background: ${isMissing ? 'rgba(220, 53, 69, 0.1)' : 'rgba(40, 167, 69, 0.1)'}; border-radius: 4px;">
+                        <div style="display: flex; align-items: center; padding: 6px 10px; background: ${isMissing ? 'rgba(220, 38, 38, 0.1)' : 'rgba(5, 150, 105, 0.1)'}; border-radius: 4px;">
                             <span style="color: ${color}; margin-right: 8px; font-weight: bold;">${icon}</span>
                             <span style="font-weight: 500; min-width: 100px;">${source}</span>
-                            <span style="color: ${isMissing ? '#dc3545' : '#666'}; font-size: 0.85rem;">${value}</span>
+                            <span style="color: ${isMissing ? '#dc2626' : '#666'}; font-size: 0.85rem;">${value}</span>
                         </div>
                     `;
                 }).join('')}
@@ -1040,7 +1046,7 @@ function renderConfidenceBreakdown(breakdown) {
                 <div style="margin-bottom: 8px;"><strong>Penalties:</strong></div>
                 <div style="display: grid; gap: 6px; margin-bottom: 12px;">
                     ${Object.entries(penalties).map(([reason, value]) => `
-                        <div style="padding: 6px 10px; background: rgba(255, 193, 7, 0.1); border-radius: 4px; color: #856404;">
+                        <div style="padding: 6px 10px; background: rgba(217, 119, 6, 0.1); border-radius: 4px; color: #92400e;">
                             ${reason}: ${value}
                         </div>
                     `).join('')}
@@ -1089,54 +1095,54 @@ function renderCascadeImpact(impact) {
     return `
         <div style="font-size: 0.9rem;">
             <!-- Business Context -->
-            <div style="margin-bottom: 16px; padding: 10px 14px; background: rgba(88, 166, 255, 0.08); border-radius: 6px; font-size: 0.8rem; color: #aaa; line-height: 1.5;">
-                <strong style="color: #58a6ff;">What is this?</strong>
-                This is the downstream impact analysis for <strong style="color: #e0e0e0;">${escapeHtml(impactAirport)}</strong>.
+            <div style="margin-bottom: 16px; padding: 10px 14px; background: rgba(79, 70, 229, 0.08); border-radius: 6px; font-size: 0.8rem; color: #4b5563; line-height: 1.5;">
+                <strong style="color: #4f46e5;">What is this?</strong>
+                This is the downstream impact analysis for <strong style="color: #111827;">${escapeHtml(impactAirport)}</strong>.
                 It shows all flights, shipments, bookings, and carriers that flow through this gateway.
                 A disruption here cascades to these entities — the revenue figure is the forwarder's booking charges at risk (not cargo value).
                 SLA deadlines approaching within 24h are flagged as imminent breaches.
                 ${operationalSources.length ? `
                     <br><br>
-                    <strong style="color: ${isOperationalSimulated ? '#ffc107' : '#58a6ff'};">Operational data source:</strong>
+                    <strong style="color: ${isOperationalSimulated ? '#d97706' : '#4f46e5'};">Operational data source:</strong>
                     ${escapeHtml(operationalSources.join(', '))}${isOperationalSimulated ? ' (simulated demo data)' : ''}
                 ` : ''}
             </div>
 
             <!-- Summary Stats -->
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;">
-                <div style="text-align: center; padding: 12px; background: rgba(255, 193, 7, 0.1); border-radius: 8px; border: 1px solid rgba(255, 193, 7, 0.3);">
-                    <div style="font-size: 1.5rem; font-weight: 700; color: #ffc107;">${summary.total_flights || 0}</div>
-                    <div style="font-size: 0.75rem; color: #aaa;">Flights Affected</div>
+                <div style="text-align: center; padding: 12px; background: rgba(217, 119, 6, 0.1); border-radius: 8px; border: 1px solid rgba(217, 119, 6, 0.3);">
+                    <div style="font-size: 1.5rem; font-weight: 700; color: #d97706;">${summary.total_flights || 0}</div>
+                    <div style="font-size: 0.75rem; color: #4b5563;">Flights Affected</div>
                 </div>
-                <div style="text-align: center; padding: 12px; background: rgba(220, 53, 69, 0.1); border-radius: 8px; border: 1px solid rgba(220, 53, 69, 0.3);">
-                    <div style="font-size: 1.5rem; font-weight: 700; color: #dc3545;">${summary.total_shipments || 0}</div>
-                    <div style="font-size: 0.75rem; color: #aaa;">Shipments Affected</div>
+                <div style="text-align: center; padding: 12px; background: rgba(220, 38, 38, 0.1); border-radius: 8px; border: 1px solid rgba(220, 38, 38, 0.3);">
+                    <div style="font-size: 1.5rem; font-weight: 700; color: #dc2626;">${summary.total_shipments || 0}</div>
+                    <div style="font-size: 0.75rem; color: #4b5563;">Shipments Affected</div>
                 </div>
-                <div style="text-align: center; padding: 12px; background: rgba(40, 167, 69, 0.1); border-radius: 8px; border: 1px solid rgba(40, 167, 69, 0.3);">
-                    <div style="font-size: 1.5rem; font-weight: 700; color: #28a745;">$${(summary.total_revenue_usd || 0).toLocaleString()}</div>
-                    <div style="font-size: 0.75rem; color: #aaa;">Revenue Exposed</div>
+                <div style="text-align: center; padding: 12px; background: rgba(5, 150, 105, 0.1); border-radius: 8px; border: 1px solid rgba(5, 150, 105, 0.3);">
+                    <div style="font-size: 1.5rem; font-weight: 700; color: #059669;">$${(summary.total_revenue_usd || 0).toLocaleString()}</div>
+                    <div style="font-size: 0.75rem; color: #4b5563;">Revenue Exposed</div>
                 </div>
-                <div style="text-align: center; padding: 12px; background: rgba(111, 66, 193, 0.1); border-radius: 8px; border: 1px solid rgba(111, 66, 193, 0.3);">
-                    <div style="font-size: 1.5rem; font-weight: 700; color: #6f42c1;">${summary.sla_breaches_imminent || 0}</div>
-                    <div style="font-size: 0.75rem; color: #aaa;">SLA Breaches (&lt;24h)</div>
+                <div style="text-align: center; padding: 12px; background: rgba(124, 58, 237, 0.1); border-radius: 8px; border: 1px solid rgba(124, 58, 237, 0.3);">
+                    <div style="font-size: 1.5rem; font-weight: 700; color: #7c3aed;">${summary.sla_breaches_imminent || 0}</div>
+                    <div style="font-size: 0.75rem; color: #4b5563;">SLA Breaches (&lt;24h)</div>
                 </div>
             </div>
 
             <!-- CONTEXT GRAPH STRUCTURE -->
-            <div style="margin-bottom: 16px; padding: 12px; background: rgba(88, 166, 255, 0.1); border-radius: 8px; border: 1px solid rgba(88, 166, 255, 0.2);">
-                <div style="font-weight: 600; margin-bottom: 8px; color: #58a6ff;">🔗 Context Graph Structure</div>
-                <div style="font-size: 0.8rem; color: #aaa; margin-bottom: 8px;">
+            <div style="margin-bottom: 16px; padding: 12px; background: rgba(79, 70, 229, 0.1); border-radius: 8px; border: 1px solid rgba(79, 70, 229, 0.2);">
+                <div style="font-weight: 600; margin-bottom: 8px; color: #4f46e5;">🔗 Context Graph Structure</div>
+                <div style="font-size: 0.8rem; color: #4b5563; margin-bottom: 8px;">
                     <strong>Traversal Path:</strong> ${graph_traversal.path || 'AIRPORT ← FLIGHT ← SHIPMENT ← BOOKING → CARRIER'}
                 </div>
                 <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
                     ${Object.entries(edge_types).map(([type, count]) => `
-                        <span style="padding: 2px 8px; background: rgba(88, 166, 255, 0.2); border-radius: 4px; font-size: 0.75rem;">
+                        <span style="padding: 2px 8px; background: rgba(79, 70, 229, 0.2); border-radius: 4px; font-size: 0.75rem;">
                             ${type}: ${count}
                         </span>
                     `).join('')}
                 </div>
                 ${carriers.length > 0 ? `
-                    <div style="font-size: 0.8rem; color: #aaa;">
+                    <div style="font-size: 0.8rem; color: #4b5563;">
                         <strong>Carriers:</strong> ${carriers.map(c => c.iata_code || c.name).join(', ')}
                     </div>
                 ` : ''}
@@ -1144,14 +1150,14 @@ function renderCascadeImpact(impact) {
 
             <!-- NETWORK POSITION -->
             ${network.connected_airports?.length > 0 ? `
-                <div style="margin-bottom: 16px; padding: 12px; background: rgba(23, 162, 184, 0.1); border-radius: 8px; border: 1px solid rgba(23, 162, 184, 0.2);">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: #17a2b8;">
-                        🌐 Network Position ${network.is_hub ? '<span style="background: #17a2b8; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">HUB</span>' : ''}
+                <div style="margin-bottom: 16px; padding: 12px; background: rgba(8, 145, 178, 0.1); border-radius: 8px; border: 1px solid rgba(8, 145, 178, 0.2);">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #0891b2;">
+                        🌐 Network Position ${network.is_hub ? '<span style="background: #0891b2; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px;">HUB</span>' : ''}
                     </div>
                     <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                         ${network.connected_airports.slice(0, 8).map(a => `
-                            <span style="padding: 4px 10px; background: rgba(23, 162, 184, 0.2); border-radius: 4px; font-size: 0.8rem;">
-                                ${a.airport} <span style="color: #888;">(${a.flights})</span>
+                            <span style="padding: 4px 10px; background: rgba(8, 145, 178, 0.2); border-radius: 4px; font-size: 0.8rem;">
+                                ${a.airport} <span style="color: #6b7280;">(${a.flights})</span>
                             </span>
                         `).join('')}
                     </div>
@@ -1160,14 +1166,14 @@ function renderCascadeImpact(impact) {
 
             <!-- CLAIMS (Graph-Derived Assertions) -->
             ${claims.length > 0 ? `
-                <div style="margin-bottom: 16px; padding: 12px; background: rgba(255, 193, 7, 0.1); border-radius: 8px; border: 1px solid rgba(255, 193, 7, 0.2);">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: #ffc107;">📋 Claims (Graph-Derived)</div>
+                <div style="margin-bottom: 16px; padding: 12px; background: rgba(217, 119, 6, 0.1); border-radius: 8px; border: 1px solid rgba(217, 119, 6, 0.2);">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #d97706;">📋 Claims (Graph-Derived)</div>
                     <div style="display: grid; gap: 6px;">
                         ${claims.map(c => `
-                            <div style="padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px; border-left: 3px solid ${c.status === 'FACT' ? '#28a745' : c.status === 'HYPOTHESIS' ? '#ffc107' : '#6c757d'};">
+                            <div style="padding: 8px; background: rgba(0,0,0,0.03); border-radius: 4px; border-left: 3px solid ${c.status === 'FACT' ? '#059669' : c.status === 'HYPOTHESIS' ? '#d97706' : '#6b7280'};">
                                 <div style="font-size: 0.85rem;">${escapeHtml(c.text)}</div>
-                                <div style="display: flex; gap: 12px; margin-top: 4px; font-size: 0.75rem; color: #888;">
-                                    <span style="color: ${c.status === 'FACT' ? '#28a745' : '#ffc107'};">${c.status}</span>
+                                <div style="display: flex; gap: 12px; margin-top: 4px; font-size: 0.75rem; color: #6b7280;">
+                                    <span style="color: ${c.status === 'FACT' ? '#059669' : '#d97706'};">${c.status}</span>
                                     <span>${c.confidence}% confidence</span>
                                     <span>Source: ${c.source}</span>
                                 </div>
@@ -1179,12 +1185,12 @@ function renderCascadeImpact(impact) {
 
             <!-- EVIDENCE PROVENANCE -->
             ${evidence_sources.length > 0 ? `
-                <div style="margin-bottom: 16px; padding: 12px; background: rgba(108, 117, 125, 0.1); border-radius: 8px; border: 1px solid rgba(108, 117, 125, 0.2);">
-                    <div style="font-weight: 600; margin-bottom: 8px; color: #6c757d;">🔍 Evidence Provenance</div>
+                <div style="margin-bottom: 16px; padding: 12px; background: rgba(107, 114, 128, 0.1); border-radius: 8px; border: 1px solid rgba(107, 114, 128, 0.2);">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #6b7280;">🔍 Evidence Provenance</div>
                     <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                         ${evidence_sources.map(s => `
-                            <span style="padding: 4px 10px; background: rgba(108, 117, 125, 0.2); border-radius: 4px; font-size: 0.8rem;">
-                                ${s.source} <span style="color: #888;">(${s.evidence_count} items)</span>
+                            <span style="padding: 4px 10px; background: rgba(107, 114, 128, 0.2); border-radius: 4px; font-size: 0.8rem;">
+                                ${s.source} <span style="color: #6b7280;">(${s.evidence_count} items)</span>
                             </span>
                         `).join('')}
                     </div>
@@ -1197,17 +1203,17 @@ function renderCascadeImpact(impact) {
             ${sla_exposure.length > 0 ? `
                 <!-- SLA Exposure (Deadline-based, not "at risk") -->
                 <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 4px; color: #dc3545;">SLA Deadline Exposure</div>
-                    <div style="font-size: 0.75rem; color: #888; margin-bottom: 8px;">Shipments with SLA deadlines within 24 hours (simulated). OVERDUE = penalty exposure is active. If everything is OVERDUE, click “Refresh Ops Graph”.</div>
+                    <div style="font-weight: 600; margin-bottom: 4px; color: #dc2626;">SLA Deadline Exposure</div>
+                    <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 8px;">Shipments with SLA deadlines within 24 hours (simulated). OVERDUE = penalty exposure is active. If everything is OVERDUE, click “Refresh Ops Graph”.</div>
                     <div style="display: grid; gap: 6px;">
                         ${sla_exposure.map(s => `
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(220, 53, 69, 0.1); border-radius: 4px; border-left: 3px solid #dc3545;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(220, 38, 38, 0.1); border-radius: 4px; border-left: 3px solid #dc2626;">
                                 <span style="font-family: monospace;">${escapeHtml(s.tracking_number)}</span>
-                                <span style="color: #888;">${s.service_level}</span>
-                                <span style="color: ${s.hours_remaining < 0 ? '#dc3545' : s.hours_remaining < 12 ? '#ffc107' : '#28a745'}; font-weight: 600;">
+                                <span style="color: #6b7280;">${s.service_level}</span>
+                                <span style="color: ${s.hours_remaining < 0 ? '#dc2626' : s.hours_remaining < 12 ? '#d97706' : '#059669'}; font-weight: 600;">
                                     ${s.hours_remaining < 0 ? 'OVERDUE' : s.hours_remaining.toFixed(1) + 'h left'}
                                 </span>
-                                <span style="color: #888; margin-left: 8px;">$${(s.booking_charge || 0).toFixed(0)}</span>
+                                <span style="color: #6b7280; margin-left: 8px;">$${(s.booking_charge || 0).toFixed(0)}</span>
                             </div>
                         `).join('')}
                     </div>
@@ -1217,14 +1223,14 @@ function renderCascadeImpact(impact) {
             ${flights.length > 0 ? `
                 <!-- Flights -->
                 <div style="margin-bottom: 16px;">
-                    <div style="font-weight: 600; margin-bottom: 4px; color: #e0e0e0;">Affected Flights</div>
-                    <div style="font-size: 0.75rem; color: #888; margin-bottom: 8px;">Flights departing from or arriving at ${escapeHtml(impactAirport)} that carry forwarded cargo</div>
+                    <div style="font-weight: 600; margin-bottom: 4px; color: #111827;">Affected Flights</div>
+                    <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 8px;">Flights departing from or arriving at ${escapeHtml(impactAirport)} that carry forwarded cargo</div>
                     <div style="display: grid; gap: 6px;">
                         ${flights.map(f => `
-                            <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: rgba(255, 255, 255, 0.05); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; padding: 8px 12px; background: rgba(0, 0, 0, 0.02); border-radius: 4px;">
                                 <span style="font-family: monospace; font-weight: 600;">${escapeHtml(f.flight_number)}</span>
                                 <span>${f.origin} → ${f.destination}</span>
-                                <span style="color: ${f.status === 'DELAYED' ? '#ffc107' : f.status === 'CANCELLED' ? '#dc3545' : '#28a745'};">
+                                <span style="color: ${f.status === 'DELAYED' ? '#d97706' : f.status === 'CANCELLED' ? '#dc2626' : '#059669'};">
                                     ${f.status}
                                 </span>
                             </div>
@@ -1236,18 +1242,18 @@ function renderCascadeImpact(impact) {
             ${shipments.length > 0 ? `
                 <!-- Shipments -->
                 <div>
-                    <div style="font-weight: 600; margin-bottom: 4px; color: #e0e0e0;">Affected Shipments</div>
-                    <div style="font-size: 0.75rem; color: #888; margin-bottom: 8px;">Shipments booked through this gateway. Booking charge = forwarder revenue (not cargo value). Service level determines SLA penalty exposure.</div>
+                    <div style="font-weight: 600; margin-bottom: 4px; color: #111827;">Affected Shipments</div>
+                    <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 8px;">Shipments booked through this gateway. Booking charge = forwarder revenue (not cargo value). Service level determines SLA penalty exposure.</div>
                     <div style="display: grid; gap: 6px;">
                         ${shipments.map(s => `
-                            <div style="padding: 10px 12px; background: rgba(255, 255, 255, 0.05); border-radius: 4px; border-left: 3px solid ${s.service_level === 'EXPRESS' ? '#dc3545' : s.service_level === 'PRIORITY' ? '#ffc107' : '#28a745'};">
+                            <div style="padding: 10px 12px; background: rgba(0, 0, 0, 0.02); border-radius: 4px; border-left: 3px solid ${s.service_level === 'EXPRESS' ? '#dc2626' : s.service_level === 'PRIORITY' ? '#d97706' : '#059669'};">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
                                     <span style="font-family: monospace; font-size: 0.85rem;">${escapeHtml(s.tracking_number)}</span>
-                                    <span style="padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: ${s.service_level === 'EXPRESS' ? 'rgba(220, 53, 69, 0.2)' : s.service_level === 'PRIORITY' ? 'rgba(255, 193, 7, 0.2)' : 'rgba(40, 167, 69, 0.2)'}; color: ${s.service_level === 'EXPRESS' ? '#dc3545' : s.service_level === 'PRIORITY' ? '#ffc107' : '#28a745'};">
+                                    <span style="padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: ${s.service_level === 'EXPRESS' ? 'rgba(220, 38, 38, 0.2)' : s.service_level === 'PRIORITY' ? 'rgba(217, 119, 6, 0.2)' : 'rgba(5, 150, 105, 0.2)'}; color: ${s.service_level === 'EXPRESS' ? '#dc2626' : s.service_level === 'PRIORITY' ? '#d97706' : '#059669'};">
                                         ${s.service_level}
                                     </span>
                                 </div>
-                                <div style="display: flex; gap: 16px; margin-top: 6px; font-size: 0.8rem; color: #888;">
+                                <div style="display: flex; gap: 16px; margin-top: 6px; font-size: 0.8rem; color: #6b7280;">
                                     <span>${escapeHtml(s.commodity)}</span>
                                     <span>${s.weight_kg?.toFixed(0) || 0} kg</span>
                                     <span>Booking: $${(s.booking_charge || 0).toFixed(2)}</span>
@@ -1285,22 +1291,22 @@ function renderBitemporalSection(bitemporal) {
     if (!hasData) return '';
 
     return `
-        <div style="margin-bottom: 16px; padding: 12px; background: rgba(138, 43, 226, 0.1); border-radius: 8px; border: 1px solid rgba(138, 43, 226, 0.2);">
-            <div style="font-weight: 600; margin-bottom: 8px; color: #8a2be2;">⏱️ Bi-Temporal Graph</div>
-            <div style="font-size: 0.75rem; color: #888; margin-bottom: 12px;">
+        <div style="margin-bottom: 16px; padding: 12px; background: rgba(124, 58, 237, 0.1); border-radius: 8px; border: 1px solid rgba(124, 58, 237, 0.2);">
+            <div style="font-weight: 600; margin-bottom: 8px; color: #7c3aed;">⏱️ Bi-Temporal Graph</div>
+            <div style="font-size: 0.75rem; color: #6b7280; margin-bottom: 12px;">
                 Event Time (when it was/will be true) vs Ingest Time (when we learned it)
             </div>
 
             ${temporal_edges.length > 0 ? `
                 <div style="margin-bottom: 12px;">
-                    <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: #aaa;">Temporal Edges (validity windows)</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: #4b5563;">Temporal Edges (validity windows)</div>
                     <div style="display: grid; gap: 4px; font-size: 0.75rem;">
                         ${temporal_edges.slice(0, 5).map(e => `
-                            <div style="display: flex; gap: 8px; padding: 6px 8px; background: rgba(0,0,0,0.2); border-radius: 4px;">
-                                <span style="color: #8a2be2; min-width: 180px;">${e.edge_type}</span>
-                                <span style="color: #888;">Event: ${e.event_time_start ? formatTime(e.event_time_start).split(',')[0] : 'NULL'}</span>
-                                <span style="color: #888;">Ingested: ${formatTime(e.ingested_at).split(',')[0]}</span>
-                                <span style="color: ${e.status === 'FACT' ? '#28a745' : '#ffc107'};">${e.status}</span>
+                            <div style="display: flex; gap: 8px; padding: 6px 8px; background: rgba(0,0,0,0.03); border-radius: 4px;">
+                                <span style="color: #7c3aed; min-width: 180px;">${e.edge_type}</span>
+                                <span style="color: #6b7280;">Event: ${e.event_time_start ? formatTime(e.event_time_start).split(',')[0] : 'NULL'}</span>
+                                <span style="color: #6b7280;">Ingested: ${formatTime(e.ingested_at).split(',')[0]}</span>
+                                <span style="color: ${e.status === 'FACT' ? '#059669' : '#d97706'};">${e.status}</span>
                             </div>
                         `).join('')}
                     </div>
@@ -1309,12 +1315,12 @@ function renderBitemporalSection(bitemporal) {
 
             ${supersession.length > 0 ? `
                 <div style="margin-bottom: 12px;">
-                    <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: #aaa;">Claim Supersession Chain (audit trail)</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: #4b5563;">Claim Supersession Chain (audit trail)</div>
                     <div style="display: grid; gap: 4px; font-size: 0.75rem;">
                         ${supersession.map(s => `
-                            <div style="padding: 6px 8px; background: rgba(0,0,0,0.2); border-radius: 4px; border-left: 3px solid #8a2be2;">
-                                <div style="color: #e0e0e0;">${escapeHtml(s.current_claim)}</div>
-                                <div style="color: #888; margin-top: 4px;">
+                            <div style="padding: 6px 8px; background: rgba(0,0,0,0.03); border-radius: 4px; border-left: 3px solid #7c3aed;">
+                                <div style="color: #111827;">${escapeHtml(s.current_claim)}</div>
+                                <div style="color: #6b7280; margin-top: 4px;">
                                     ↑ Supersedes: "${escapeHtml(s.supersedes_claim)}"
                                 </div>
                             </div>
@@ -1325,10 +1331,10 @@ function renderBitemporalSection(bitemporal) {
 
             ${versions.length > 0 ? `
                 <div style="margin-bottom: 12px;">
-                    <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: #aaa;">Node Version History</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: #4b5563;">Node Version History</div>
                     <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 0.75rem;">
                         ${versions.map(v => `
-                            <span style="padding: 4px 8px; background: rgba(138, 43, 226, 0.2); border-radius: 4px;">
+                            <span style="padding: 4px 8px; background: rgba(124, 58, 237, 0.2); border-radius: 4px;">
                                 ${v.valid_to === 'CURRENT' ? '●' : '○'} ${formatTime(v.valid_from).split(',')[0]}
                                 ${v.valid_to !== 'CURRENT' ? ` → ${formatTime(v.valid_to).split(',')[0]}` : ' (current)'}
                             </span>
@@ -1339,16 +1345,16 @@ function renderBitemporalSection(bitemporal) {
 
             ${contradictions.length > 0 ? `
                 <div>
-                    <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: #dc3545;">⚠️ Temporal Contradictions</div>
+                    <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: #dc2626;">⚠️ Temporal Contradictions</div>
                     <div style="display: grid; gap: 4px; font-size: 0.75rem;">
                         ${contradictions.map(c => `
-                            <div style="padding: 6px 8px; background: rgba(220, 53, 69, 0.1); border-radius: 4px; border-left: 3px solid #dc3545;">
+                            <div style="padding: 6px 8px; background: rgba(220, 38, 38, 0.1); border-radius: 4px; border-left: 3px solid #dc2626;">
                                 <div style="display: flex; justify-content: space-between;">
-                                    <span style="color: ${c.status === 'OPEN' ? '#dc3545' : '#28a745'};">${c.status}</span>
-                                    <span style="color: #888;">${formatTime(c.detected_at).split(',')[0]}</span>
+                                    <span style="color: ${c.status === 'OPEN' ? '#dc2626' : '#059669'};">${c.status}</span>
+                                    <span style="color: #6b7280;">${formatTime(c.detected_at).split(',')[0]}</span>
                                 </div>
-                                <div style="color: #e0e0e0; margin-top: 4px;">${escapeHtml(c.claim_a)}</div>
-                                <div style="color: #ffc107;">vs ${escapeHtml(c.claim_b)}</div>
+                                <div style="color: #111827; margin-top: 4px;">${escapeHtml(c.claim_a)}</div>
+                                <div style="color: #d97706;">vs ${escapeHtml(c.claim_b)}</div>
                             </div>
                         `).join('')}
                     </div>
@@ -1388,6 +1394,203 @@ function toggleSection(sectionId) {
 // Make selectCase and toggleSection available globally for onclick
 window.selectCase = selectCase;
 window.toggleSection = toggleSection;
+
+// ============================================================
+// PLAYBOOKS FUNCTIONALITY
+// ============================================================
+
+const playbooksList = document.getElementById('playbooks-list');
+const playbooksCount = document.getElementById('playbooks-count');
+const btnCreatePlaybook = document.getElementById('btn-create-playbook');
+const btnRefreshPlaybooks = document.getElementById('btn-refresh-playbooks');
+const playbookDetail = document.getElementById('playbook-detail');
+
+let selectedPlaybookId = null;
+let playbooksData = [];
+
+// Initialize playbooks
+if (btnRefreshPlaybooks) {
+    btnRefreshPlaybooks.addEventListener('click', loadPlaybooks);
+    loadPlaybooks();
+}
+if (btnCreatePlaybook) {
+    btnCreatePlaybook.addEventListener('click', handleCreatePlaybook);
+}
+
+async function loadPlaybooks() {
+    try {
+        const result = await apiCall('/playbooks');
+        playbooksData = result.playbooks || [];
+        playbooksCount.textContent = playbooksData.length;
+        renderPlaybooksList(playbooksData);
+    } catch (error) {
+        playbooksList.innerHTML = '<p class="empty-state">Failed to load playbooks</p>';
+        playbooksCount.textContent = '0';
+    }
+}
+
+function renderPlaybooksList(playbooks) {
+    if (playbooks.length === 0) {
+        playbooksList.innerHTML = '<p class="empty-state">No playbooks yet. Run an agent on a case, then create a playbook from it.</p>';
+        return;
+    }
+
+    playbooksList.innerHTML = playbooks.map(p => {
+        const stats = p.stats || {};
+        const successRate = parseFloat(stats.success_rate || 0);
+        const useCount = parseInt(stats.use_count || 0);
+        const domain = p.domain || 'operational';
+        const caseType = p.case_type || '--';
+
+        // Use backend-computed aging (respects domain half-lives)
+        const isStale = p.is_stale || false;
+        const agedScore = p.aged_score != null ? p.aged_score : successRate;
+        const agedPct = Math.max(agedScore * 100, 5);
+        const agedColor = agedScore > 0.5 ? 'var(--color-success)' : agedScore > 0.2 ? 'var(--color-warning)' : 'var(--color-danger)';
+
+        return `
+            <div class="playbook-item ${p.playbook_id === selectedPlaybookId ? 'selected' : ''} ${isStale ? 'stale' : ''}"
+                 data-playbook-id="${p.playbook_id}"
+                 onclick="selectPlaybook('${p.playbook_id}')">
+                <div class="playbook-name">${escapeHtml(p.name)}</div>
+                <div class="playbook-meta">
+                    <span class="tag domain">${domain}</span>
+                    <span class="tag">${caseType}</span>
+                    <span class="tag">${useCount} uses</span>
+                    <span class="tag">${(successRate * 100).toFixed(0)}% success</span>
+                    ${isStale
+                        ? '<span class="tag stale-tag">STALE</span>'
+                        : '<span class="tag fresh-tag">FRESH</span>'
+                    }
+                </div>
+                <div class="aging-bar">
+                    <div class="aging-fill" style="width: ${agedPct}%; background-color: ${agedColor}"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function selectPlaybook(playbookId) {
+    selectedPlaybookId = playbookId;
+
+    // Update visual selection
+    document.querySelectorAll('.playbook-item').forEach(el => {
+        el.classList.toggle('selected', el.dataset.playbookId === playbookId);
+    });
+
+    // Load full playbook detail with aging metadata
+    try {
+        const pb = await apiCall(`/playbooks/${playbookId}`);
+        renderPlaybookDetail(pb);
+        playbookDetail.classList.remove('hidden');
+    } catch (error) {
+        playbookDetail.classList.add('hidden');
+    }
+}
+
+function renderPlaybookDetail(pb) {
+    const stats = pb.stats || {};
+    const successRate = parseFloat(stats.success_rate || 0);
+    const useCount = parseInt(stats.use_count || 0);
+    const successCount = parseInt(stats.success_count || 0);
+    const decayFactor = pb.decay_factor != null ? pb.decay_factor : 1.0;
+    const policyAlignment = pb.policy_alignment != null ? pb.policy_alignment : 1.0;
+    const isStale = pb.is_stale || false;
+    const domain = pb.domain || 'operational';
+
+    const decayColor = decayFactor > 0.7 ? 'var(--color-success)' : decayFactor > 0.25 ? 'var(--color-warning)' : 'var(--color-danger)';
+    const alignColor = policyAlignment > 0.7 ? 'var(--color-success)' : policyAlignment > 0.4 ? 'var(--color-warning)' : 'var(--color-danger)';
+
+    const actions = pb.action_template?.action_sequence || [];
+
+    playbookDetail.innerHTML = `
+        <div class="detail-header">
+            <h4>${escapeHtml(pb.name)}</h4>
+            ${isStale ? '<span style="color: var(--color-danger); font-size: 0.75rem; font-weight: 600;">STALE</span>' : ''}
+        </div>
+
+        <div class="aging-grid">
+            <div class="aging-metric">
+                <span class="metric-label">Decay Factor</span>
+                <span class="metric-value" style="color: ${decayColor}">${(decayFactor * 100).toFixed(0)}%</span>
+            </div>
+            <div class="aging-metric">
+                <span class="metric-label">Policy Alignment</span>
+                <span class="metric-value" style="color: ${alignColor}">${(policyAlignment * 100).toFixed(0)}%</span>
+            </div>
+            <div class="aging-metric">
+                <span class="metric-label">Success Rate</span>
+                <span class="metric-value">${(successRate * 100).toFixed(0)}% (${successCount}/${useCount})</span>
+            </div>
+            <div class="aging-metric">
+                <span class="metric-label">Domain</span>
+                <span class="metric-value" style="color: var(--color-primary)">${domain}</span>
+            </div>
+        </div>
+
+        <div style="font-size: 0.75rem; color: var(--color-text-muted); margin-bottom: 6px;">
+            Created: ${pb.created_at ? new Date(pb.created_at).toLocaleDateString() : '--'}
+            ${pb.last_used_at ? ' | Last used: ' + new Date(pb.last_used_at).toLocaleDateString() : ''}
+        </div>
+
+        ${actions.length > 0 ? `
+            <div style="font-size: 0.75rem; color: var(--color-text-muted); margin-bottom: 4px;">Action Sequence (${actions.length} steps):</div>
+            <div class="action-list">
+                ${actions.map((a, i) => `
+                    <div class="action-step">${i + 1}. ${escapeHtml(a.type || JSON.stringify(a))}</div>
+                `).join('')}
+            </div>
+        ` : '<div style="font-size: 0.75rem; color: var(--color-text-muted);">No action sequence defined</div>'}
+
+        ${pb.pattern ? `
+            <div style="margin-top: 8px;">
+                <div style="font-size: 0.75rem; color: var(--color-text-muted); margin-bottom: 4px;">Pattern:</div>
+                <div style="font-size: 0.7rem; font-family: var(--font-mono); padding: 6px; background: var(--color-surface); border-radius: 4px; max-height: 80px; overflow-y: auto;">
+                    ${escapeHtml(JSON.stringify(pb.pattern, null, 1))}
+                </div>
+            </div>
+        ` : ''}
+    `;
+}
+
+async function handleCreatePlaybook() {
+    if (!selectedCaseId) {
+        showStatus('Select a resolved case first', 'error');
+        return;
+    }
+
+    btnCreatePlaybook.disabled = true;
+    btnCreatePlaybook.textContent = 'Creating...';
+
+    try {
+        const result = await apiCall('/playbooks/from-case', 'POST', {
+            case_id: selectedCaseId,
+        });
+
+        showStatus(`Playbook created: ${result.playbook_id.substring(0, 8)}...`, 'success');
+        await loadPlaybooks();
+        selectPlaybook(result.playbook_id);
+    } catch (error) {
+        showStatus(`Playbook creation failed: ${error.message}`, 'error');
+    } finally {
+        btnCreatePlaybook.disabled = false;
+        btnCreatePlaybook.textContent = 'Create from Case';
+        updateCreatePlaybookButton();
+    }
+}
+
+function updateCreatePlaybookButton() {
+    if (!btnCreatePlaybook) return;
+
+    // Enable only when a case is selected
+    // The API will reject if not RESOLVED, so we just enable when any case is selected
+    btnCreatePlaybook.disabled = !selectedCaseId;
+}
+
+// No wrapper needed — updateCreatePlaybookButton is called inside selectCase
+
+window.selectPlaybook = selectPlaybook;
 
 // ============================================================
 // SIMULATION FUNCTIONALITY

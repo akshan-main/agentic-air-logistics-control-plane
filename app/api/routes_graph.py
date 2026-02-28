@@ -5,12 +5,14 @@ Graph API routes.
 Endpoints for querying the context graph.
 """
 
+import logging
 from typing import Dict, Any, Optional, List
-from uuid import UUID
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/graph", tags=["graph"])
 
@@ -67,7 +69,6 @@ async def get_case_subgraph(
     """
     from sqlalchemy import text
     from ..db.engine import SessionLocal
-    from datetime import timezone
 
     try:
         with SessionLocal() as session:
@@ -178,7 +179,8 @@ async def get_case_subgraph(
             )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        logger.exception("Graph query failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/traverse", response_model=SubgraphResponse)
@@ -266,7 +268,8 @@ async def traverse_graph(
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Traversal error: {str(e)}")
+        logger.exception("Graph traversal failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -311,10 +314,8 @@ async def hybrid_search_endpoint(
     except Exception as e:
         # Don't silently swallow errors - expose them for debugging
         # This helps identify DB connection issues, missing tables, etc.
-        raise HTTPException(
-            status_code=500,
-            detail=f"Hybrid search failed: {str(e)}. Check database connection and schema."
-        )
+        logger.exception("Hybrid search failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/node/{node_id}")
@@ -411,7 +412,8 @@ async def cascade_from_airport(
             "affected_bookings": result.affected_bookings,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Graph operation failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/shipments-with-booking/{airport_icao}")
@@ -447,7 +449,8 @@ async def get_shipments_with_booking(
             "can_receive_shipment_actions": len(shipments) > 0,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Graph operation failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================
@@ -591,7 +594,8 @@ async def query_beliefs_at_time(
             }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Graph operation failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/bitemporal/case/{case_id}/replay")
@@ -681,4 +685,5 @@ async def replay_case_decisions(
             }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Graph operation failed")
+        raise HTTPException(status_code=500, detail="Internal server error")

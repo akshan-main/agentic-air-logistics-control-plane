@@ -5,12 +5,15 @@ Decision packet API routes.
 Endpoints for retrieving decision packets.
 """
 
+import logging
 from typing import Dict, Any, Optional, List
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from ..db.engine import get_session
 from ..packets.builder import build_decision_packet
@@ -189,7 +192,8 @@ async def get_packet_summary(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        logger.exception("Packet query failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("")
@@ -266,4 +270,5 @@ async def list_packets(
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        logger.exception("Packet query failed")
+        raise HTTPException(status_code=500, detail="Internal server error")

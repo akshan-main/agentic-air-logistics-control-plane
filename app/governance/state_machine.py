@@ -89,8 +89,6 @@ class ActionStateMachine:
             )
 
         # Execute transition
-        from datetime import datetime, timezone
-
         if to_state == ActionState.APPROVED:
             self.session.execute(
                 text("""

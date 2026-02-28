@@ -5,7 +5,6 @@ Test hybrid ranking determinism.
 Verifies that the hybrid retrieval produces deterministic results.
 """
 
-import pytest
 from uuid import uuid4
 
 from app.graph.retrieval import (

@@ -20,6 +20,7 @@ dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
+    "ruff>=0.4.0",
 ]
 ml = [
     "sentence-transformers>=2.2.0",
@@ -29,8 +30,12 @@ llm = [
     "openai>=1.10.0",
     "anthropic>=0.18.0",
 ]
+snowflake = [
+    "snowflake-connector-python>=3.6.0",
+    "snowflake-snowpark-python>=1.11.0",
+]
 all = [
-    "agentic-air-logistics-control-plane[dev,ml,llm]",
+    "agentic-air-logistics-control-plane[dev,ml,llm,snowflake]",
 ]
 
 [project.scripts]
@@ -42,7 +47,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["app*", "tests*", "simulation*"]
+include = ["app*", "simulation*", "rag*", "audit_warehouse*"]
+
+[tool.setuptools.package-data]
+"app" = ["ui/static/**/*", "db/migrations/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

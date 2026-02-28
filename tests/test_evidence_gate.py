@@ -8,7 +8,6 @@ Database triggers enforce that FACT claims/edges must have evidence.
 import pytest
 from uuid import uuid4
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
 
 
 class TestClaimEvidenceGate:

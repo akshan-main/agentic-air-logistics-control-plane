@@ -135,6 +135,9 @@ class NWSAlertsClient:
             )
             retrieved_at = datetime.now(timezone.utc)
 
+            if data is None or not isinstance(data, dict):
+                return []
+
             features = data.get('features', [])
             alerts = []
 

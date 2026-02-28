@@ -184,7 +184,7 @@ class DecisionPacketBuilder:
                 rec = meta.get("recommended_posture")
                 if rec and rec in Posture.__members__:
                     posture = Posture[rec]
-                    reason = f"From stored risk assessment (case was BLOCKED)"
+                    reason = "From stored risk assessment (case was BLOCKED)"
 
         return PostureAction(
             posture=posture.value,
@@ -455,7 +455,6 @@ class DecisionPacketBuilder:
 
         USES CANONICAL VISIBILITY PREDICATES for bi-temporal correctness.
         """
-        from datetime import timedelta
 
         # Get airport from case scope
         airport_icao = self._get_airport()
@@ -463,7 +462,6 @@ class DecisionPacketBuilder:
             return None
 
         now = datetime.now(timezone.utc)
-        deadline_24h = now + timedelta(hours=24)
 
         # Use canonical visibility predicates for bi-temporal queries
         # Query current state: at_event_time=now, at_ingest_time=now

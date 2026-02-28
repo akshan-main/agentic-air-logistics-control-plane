@@ -6,10 +6,10 @@ Detects when different data sources report conflicting information
 about airport status.
 """
 
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 from uuid import UUID
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session

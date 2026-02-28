@@ -7,12 +7,10 @@ Verifies the agent is a true state machine, not a fixed workflow.
 
 import pytest
 from uuid import uuid4
-from datetime import datetime, timezone
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from sqlalchemy import text
 
 from app.agents.orchestrator import Orchestrator, OrchestratorState
-from app.agents.state_graph import AgentState
 from app.agents.planner.beam_search import (
     score_action,
     ActionCandidate,
@@ -101,7 +99,6 @@ class TestCriticGate:
     def test_critic_forces_reinvestigation(self, session, sample_case_id):
         """Critic returning INSUFFICIENT_EVIDENCE -> state returns to INVESTIGATE."""
         from app.agents.roles.critic import CriticAgent
-        from app.agents.orchestrator import OrchestratorState
 
         # Mock critic to return INSUFFICIENT_EVIDENCE
         with patch.object(CriticAgent, 'evaluate') as mock_evaluate:
@@ -117,7 +114,7 @@ class TestCriticGate:
 
             # Evaluate transition condition
             # When critic says INSUFFICIENT_EVIDENCE, should transition back to INVESTIGATE
-            condition_result = orchestrator._eval_condition(
+            orchestrator._eval_condition(
                 "critic_verdict == 'INSUFFICIENT_EVIDENCE'"
             )
 
@@ -143,7 +140,6 @@ class TestPolicyJudgeVeto:
     def test_policy_judge_veto(self, session, sample_case_id):
         """PolicyJudge returning BLOCKED -> case completes without execution."""
         from app.agents.roles.policy_judge import PolicyJudgeAgent
-        from app.agents.orchestrator import OrchestratorState
 
         with patch.object(PolicyJudgeAgent, 'evaluate') as mock_evaluate:
             mock_evaluate.return_value = {

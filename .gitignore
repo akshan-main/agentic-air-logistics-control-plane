@@ -22,6 +22,8 @@ build/
 var/evidence/*
 !var/evidence/.gitkeep
 outputs/
+audit_warehouse/staging/
+audit_warehouse/logs/
 
 # Tooling / local-only configs
 .claude/

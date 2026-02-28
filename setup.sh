@@ -10,8 +10,14 @@
 
 set -e
 
+# Support --no-prompt for non-interactive use (e.g. make quickstart)
+NO_PROMPT=false
+if [ "$1" = "--no-prompt" ]; then
+    NO_PROMPT=true
+fi
+
 echo "========================================"
-echo "  Agentic Air Logistics Control Plane - Setup"
+echo "  Air Logistics Control Plane - Setup"
 echo "========================================"
 
 # Colors
@@ -154,8 +160,16 @@ if [ ! -f ".env" ]; then
     fi
 fi
 
-# Check for required variables
-source .env 2>/dev/null || true
+# Check for required variables (parse via python to handle special chars in URLs)
+eval "$(python3 -c "
+from dotenv import dotenv_values
+vals = dotenv_values('.env')
+for k, v in vals.items():
+    if v is not None:
+        # Shell-safe export: single-quote the value
+        safe = v.replace(\"'\", \"'\\\"'\\\"'\")
+        print(f\"export {k}='{safe}'\")
+" 2>/dev/null)" || source .env 2>/dev/null || true
 
 if [ -z "$DATABASE_URL" ]; then
     print_error "DATABASE_URL not set in .env"
@@ -231,6 +245,7 @@ migrations = [
     "app/db/migrations/004_indexes.sql",
     "app/db/migrations/005_seed_policies.sql",
     "app/db/migrations/006_evidence_dedup.sql",
+    "app/db/migrations/007_playbook_aging.sql",
 ]
 
 for migration in migrations:
@@ -359,13 +374,15 @@ echo ""
 echo "API Documentation: ${BLUE}http://localhost:8000/docs${NC}"
 echo ""
 
-# Ask if user wants to start server now
-read -p "Start the server now? [Y/n] " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
-    echo ""
-    echo -e "${GREEN}Starting server...${NC}"
-    echo "Press Ctrl+C to stop"
-    echo ""
-    python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Ask if user wants to start server now (skip in non-interactive mode)
+if [ "$NO_PROMPT" = "false" ]; then
+    read -p "Start the server now? [Y/n] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+        echo ""
+        echo -e "${GREEN}Starting server...${NC}"
+        echo "Press Ctrl+C to stop"
+        echo ""
+        python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    fi
 fi

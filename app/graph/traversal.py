@@ -8,7 +8,7 @@ Returns subgraph (nodes + edges), not flat rows.
 
 from datetime import datetime, timedelta
 from typing import List, Optional, Set
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import text
@@ -482,7 +482,6 @@ def cascade_from_airport(
 
                 # Check SLA deadline and service level
                 sla_deadline_str = attrs.get("sla_deadline")
-                shipment_id = attrs.get("shipment_id", "")
 
                 if sla_deadline_str:
                     try:

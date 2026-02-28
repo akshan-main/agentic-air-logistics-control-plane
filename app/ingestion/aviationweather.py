@@ -96,6 +96,8 @@ class AviationWeatherClient:
 
             # API returns list of observations
             observations = data if isinstance(data, list) else [data]
+            # Filter out null entries (API can return [null])
+            observations = [o for o in observations if o is not None and isinstance(o, dict)]
             if not observations:
                 return None
 
@@ -128,6 +130,8 @@ class AviationWeatherClient:
                 return None
 
             forecasts = data if isinstance(data, list) else [data]
+            # Filter out null entries (API can return [null])
+            forecasts = [f for f in forecasts if f is not None and isinstance(f, dict)]
             if not forecasts:
                 return None
 

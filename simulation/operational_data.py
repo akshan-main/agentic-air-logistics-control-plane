@@ -18,8 +18,8 @@ This enables:
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
-from uuid import UUID, uuid4
-from dataclasses import dataclass, field
+from uuid import uuid4
+from dataclasses import dataclass
 
 
 @dataclass
@@ -297,7 +297,15 @@ class OperationalDataGenerator:
         """
         sla_hours = SERVICE_LEVELS[shipment.service_level]
         booked_at = flight.scheduled_departure - timedelta(hours=self.rng.uniform(24, 72))
-        sla_deadline = flight.scheduled_arrival + timedelta(hours=sla_hours)
+
+        # ~20% of bookings get tight/overdue SLA deadlines so demos show imminent breaches.
+        # Without this, SLA = arrival + 24-96h pushes everything safely into the future.
+        now = datetime.now(timezone.utc)
+        if self.rng.random() < 0.20:
+            # Tight: deadline 0-4 hours from now (imminent) or already past (overdue)
+            sla_deadline = now + timedelta(hours=self.rng.uniform(-2, 4))
+        else:
+            sla_deadline = flight.scheduled_arrival + timedelta(hours=sla_hours)
 
         # Realistic air freight rates (what forwarder actually charges)
         # Base rates per kg by service level

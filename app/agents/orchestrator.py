@@ -779,19 +779,28 @@ class Orchestrator:
             manager = PlaybookManager(self.session)
             matches = manager.find_matching(case_type, scope, limit=1)
 
-            if matches and matches[0].get("match_score", 0) > 0.5:
+            if matches:
                 best_match = matches[0]
-                self._playbook_id = str(best_match["playbook_id"])
-                self._playbook_pattern = best_match.get("pattern", {})
-                self._playbook_action_template = best_match.get("action_template", {})
+                match_score = best_match.get("match_score", 0)
+                aged_score = best_match.get("aged_score", 0)
+                composite = match_score * aged_score if aged_score > 0 else match_score
 
-                # Log playbook match
-                self._log_trace("TOOL_RESULT", "playbook_matched", {
-                    "playbook_id": self._playbook_id,
-                    "playbook_name": best_match.get("name"),
-                    "match_score": best_match.get("match_score"),
-                    "description": f"Matched playbook: {best_match.get('name')} (score: {best_match.get('match_score'):.2f})",
-                })
+                if composite > 0.3 and match_score > 0.5:
+                    self._playbook_id = str(best_match["playbook_id"])
+                    self._playbook_pattern = best_match.get("pattern", {})
+                    self._playbook_action_template = best_match.get("action_template", {})
+
+                    # Log playbook match
+                    self._log_trace("TOOL_RESULT", "playbook_matched", {
+                        "playbook_id": self._playbook_id,
+                        "playbook_name": best_match.get("name"),
+                        "match_score": match_score,
+                        "aged_score": aged_score,
+                        "composite_score": composite,
+                        "decay_factor": best_match.get("decay_factor"),
+                        "policy_alignment": best_match.get("policy_alignment"),
+                        "description": f"Matched playbook: {best_match.get('name')} (match={match_score:.2f}, aged={aged_score:.2f}, composite={composite:.2f})",
+                    })
 
         except Exception as e:
             # Playbook matching is optional - continue without it
@@ -934,8 +943,13 @@ class Orchestrator:
         if not template_sequence:
             return base_actions
 
+        # Normalize legacy string actions to dict format
+        template_sequence = [
+            {"type": a, "args": {}} if isinstance(a, str) else a
+            for a in template_sequence
+        ]
+
         guided_actions = []
-        base_action_types = {a.get("type") for a in base_actions}
 
         # First, include base actions that align with template
         for template_action in template_sequence:
@@ -1015,6 +1029,10 @@ class Orchestrator:
             "description": "Case blocked by policy - cannot proceed with proposed actions",
         })
 
+        # Record playbook failure if one was used
+        if self._playbook_used and self._playbook_id:
+            self._record_playbook_failure("policy_blocked")
+
     def complete_waiting_approval(self):
         """
         Complete orchestrator while actions await approval.
@@ -1047,6 +1065,10 @@ class Orchestrator:
             "pending_approval_count": pending_count,
             "description": f"Waiting for approval of {pending_count} action(s). Case will resume after approval via API.",
         })
+
+        # Record playbook failure if one was used (waiting isn't success)
+        if self._playbook_used and self._playbook_id:
+            self._record_playbook_failure("waiting_approval")
 
     def complete_case(self):
         """Complete the case successfully."""
@@ -1114,6 +1136,30 @@ class Orchestrator:
 
         except Exception as e:
             # Non-critical - don't fail the case
+            self._log_trace("TOOL_RESULT", "playbook_record_failed", {
+                "error": str(e),
+            })
+
+    def _record_playbook_failure(self, reason: str):
+        """Record playbook failure for learning (blocked/waiting paths)."""
+        from ..replay.playbooks import PlaybookManager
+
+        try:
+            manager = PlaybookManager(self.session)
+            manager.record_usage(
+                playbook_id=UUID(self._playbook_id),
+                case_id=self.case_id,
+                success=False,
+            )
+
+            self._log_trace("TOOL_RESULT", "playbook_usage_recorded", {
+                "playbook_id": self._playbook_id,
+                "success": False,
+                "reason": reason,
+                "description": f"Playbook failure recorded: {reason}",
+            })
+
+        except Exception as e:
             self._log_trace("TOOL_RESULT", "playbook_record_failed", {
                 "error": str(e),
             })

@@ -14,15 +14,15 @@ Coverage: US airports and territories
 Sources: FAA NAS, NWS Alerts, METAR, TAF, OpenSky
 """
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Any, List, Optional
 from dataclasses import dataclass, field
 
-from .faa_nasstatus import FAANASStatusClient, AirportStatus
-from .aviationweather import AviationWeatherClient, MetarObservation, TafForecast
-from .nws_alerts import NWSAlertsClient, WeatherAlert
-from .opensky import OpenSkyClient, OpenSkyResponse, MissingEvidenceRequest
+from .faa_nasstatus import FAANASStatusClient
+from .aviationweather import AviationWeatherClient
+from .nws_alerts import NWSAlertsClient
+from .opensky import OpenSkyClient, MissingEvidenceRequest
 
 
 @dataclass

@@ -6,7 +6,6 @@ Verifies that claims and edges maintain proper audit trail
 through supersedes links for reconciliation.
 """
 
-import pytest
 from uuid import uuid4
 from sqlalchemy import text
 

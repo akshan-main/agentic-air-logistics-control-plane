@@ -5,7 +5,7 @@ Graph similarity metrics.
 Uses neighborhood-based similarity (Jaccard) for deterministic scoring.
 """
 
-from typing import Set, List, Optional
+from typing import Set, Optional
 from uuid import UUID
 
 from sqlalchemy import text

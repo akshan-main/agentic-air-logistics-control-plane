@@ -13,9 +13,9 @@ from uuid import UUID, uuid4
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ..db.engine import session_scope, SessionLocal
-from .models import Node, NodeVersion, Edge, Claim, GraphSubset
-from .visibility import edge_visible_at, node_version_visible_at, get_visibility_params
+from ..db.engine import SessionLocal
+from .models import Node, NodeVersion, Edge, Claim
+from .visibility import edge_visible_at, get_visibility_params
 
 
 class GraphStore:

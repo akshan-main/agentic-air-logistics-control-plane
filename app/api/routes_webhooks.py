@@ -13,7 +13,7 @@ from dataclasses import asdict
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 
 from ..webhooks import WebhookRegistry, WebhookExecutor
 from ..webhooks.registry import WebhookEventType

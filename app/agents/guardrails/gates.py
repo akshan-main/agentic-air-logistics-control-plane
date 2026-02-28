@@ -18,7 +18,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ...db.engine import SessionLocal
-from ..state_graph import BeliefState
 
 
 class EvidenceBindingGate:

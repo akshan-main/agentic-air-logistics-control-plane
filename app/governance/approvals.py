@@ -5,12 +5,11 @@ Approval management for governed actions.
 
 from typing import Optional, Tuple
 from uuid import UUID
-from datetime import datetime, timezone
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from .models import ActionState, ApprovalDecision
+from .models import ActionState
 from .state_machine import ActionStateMachine
 
 

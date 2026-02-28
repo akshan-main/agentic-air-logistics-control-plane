@@ -8,14 +8,12 @@ Webhooks can be configured for different event types:
 - CASE_RESOLVED: Fired when a case reaches terminal state
 """
 
-import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from enum import Enum
 
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 

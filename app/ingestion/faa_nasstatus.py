@@ -62,7 +62,10 @@ class FAANASStatusClient:
                 return self._parse_xml(response.text, retrieved_at)
             else:
                 # Try JSON fallback
-                return self._parse_json(response.json(), retrieved_at)
+                data = response.json()
+                if data is None:
+                    return []
+                return self._parse_json(data, retrieved_at)
 
         except HttpClientError:
             raise

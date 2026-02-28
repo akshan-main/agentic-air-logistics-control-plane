@@ -5,7 +5,6 @@ Test bi-temporal query behavior.
 Verifies that "as of time T" queries return correct historical data.
 """
 
-import pytest
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import text

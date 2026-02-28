@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agentic Air Logistics Control Plane</title>
-    <link rel="stylesheet" href="/ui/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/ui/styles.css?v=5">
 </head>
 <body>
     <header>
@@ -33,7 +36,7 @@
 
             <div id="status-message" class="status-message hidden"></div>
 
-            <div style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--color-border);">
+            <div class="demo-data-section">
                 <h3>Demo Data (optional)</h3>
                 <p class="section-description">
                     The downstream <strong>Context Graph Analysis</strong> section uses operational entities
@@ -45,7 +48,7 @@
                     <button id="btn-clear-ops" class="btn btn-outline" disabled>Clear Ops Graph</button>
                     <button id="btn-refresh-ops" class="btn btn-outline">Refresh Ops Stats</button>
                 </div>
-                <div id="ops-stats" style="margin-top: 10px; font-size: 0.8rem; color: var(--color-text-muted);">
+                <div id="ops-stats" class="ops-stats-line">
                     Ops graph: --
                 </div>
             </div>
@@ -57,6 +60,22 @@
                 <p class="empty-state">No cases loaded</p>
             </div>
             <button id="btn-refresh-cases" class="btn btn-outline">Refresh Cases</button>
+        </section>
+
+        <section class="playbooks-panel" id="playbooks-panel">
+            <h2>Playbooks <span class="count" id="playbooks-count">0</span></h2>
+            <p class="section-description">
+                Learned patterns from resolved cases. Ranked by <strong>aged relevance</strong>
+                (success rate, temporal decay, policy alignment).
+            </p>
+            <div id="playbooks-list" class="playbooks-list">
+                <p class="empty-state">No playbooks yet</p>
+            </div>
+            <div class="button-group playbook-actions">
+                <button id="btn-create-playbook" class="btn btn-outline" disabled>Create from Case</button>
+                <button id="btn-refresh-playbooks" class="btn btn-outline">Refresh</button>
+            </div>
+            <div id="playbook-detail" class="playbook-detail hidden"></div>
         </section>
 
         <!-- Simulation section hidden for demo - use /simulation API directly for testing -->
@@ -207,6 +226,6 @@
     </footer>
 
     <script src="/ui/airports.js"></script>
-    <script src="/ui/app.js?v=10"></script>
+    <script src="/ui/app.js?v=16"></script>
 </body>
 </html>

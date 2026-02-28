@@ -4,7 +4,7 @@ Rollback management for failed actions.
 """
 
 import json
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 
@@ -159,8 +159,6 @@ class RollbackManager:
         result: dict,
     ):
         """Record rollback outcome to trace."""
-        from uuid import uuid4
-
         seq = get_next_trace_seq(case_id, self.session)
         self.session.execute(
             text("""

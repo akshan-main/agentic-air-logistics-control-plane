@@ -302,7 +302,6 @@ class InvestigatorAgent:
     ) -> None:
         """Use existing recent evidence instead of re-fetching."""
         from uuid import uuid4
-        from pathlib import Path
         from ...evidence.store import EVIDENCE_ROOT
 
         evidence_ids: Dict[str, UUID] = {}
@@ -386,8 +385,6 @@ class InvestigatorAgent:
 
         Reads evidence payloads and creates graph edges.
         """
-        from uuid import uuid4
-        from pathlib import Path
 
         # Get or create airport node
         airport_node = self.graph.get_node_by_identifier("AIRPORT", airport_icao)

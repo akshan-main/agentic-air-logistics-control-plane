@@ -6,13 +6,16 @@ Air freight Gateway Posture Directive system that continuously ingests
 real disruption signals and outputs governed operational decisions.
 """
 
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 from .settings import settings
 from .db.engine import check_connection, check_pgvector_version
@@ -25,6 +28,7 @@ from .api import (
     webhooks_router,
     sandbox_router,
 )
+from .api.routes_rag import router as rag_router
 
 # Import simulation router
 from simulation.api import router as simulation_router
@@ -76,9 +80,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware - FIXED: More restrictive by default
-# In production, set ALLOWED_ORIGINS env variable to specific domains
-import os
+# CORS middleware
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
 app.add_middleware(
     CORSMiddleware,
@@ -88,10 +90,6 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
 )
 
-
-# Security headers middleware
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add basic security headers to all responses."""
@@ -117,6 +115,7 @@ app.include_router(playbooks_router)
 app.include_router(webhooks_router)
 app.include_router(sandbox_router)
 app.include_router(simulation_router)
+app.include_router(rag_router)
 
 
 # Health check endpoints
@@ -146,7 +145,6 @@ async def root():
 
 
 # Mount static files for UI
-import os
 ui_path = os.path.join(os.path.dirname(__file__), "ui", "static")
 if os.path.exists(ui_path):
     print(f"Mounting UI from: {ui_path}")

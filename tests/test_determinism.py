@@ -5,7 +5,6 @@ Test determinism in ranking and scoring.
 Verifies that the system produces deterministic, reproducible results.
 """
 
-import pytest
 from uuid import uuid4
 
 from app.graph.retrieval import (

@@ -30,7 +30,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.graph.store import GraphStore, get_graph_store
-from app.graph.models import Node, Edge
+from app.graph.models import Node
 from app.evidence.store import store_evidence, EVIDENCE_ROOT
 from app.evidence.extract import extract_excerpt
 from .operational_data import (
@@ -1215,7 +1215,7 @@ def clear_seeded_operational_data_for_airport(
 
         # Delete only operational nodes that are now orphaned.
         orphan_result = session.execute(
-            text(f"""
+            text("""
                 SELECT n.id, n.type
                 FROM node n
                 WHERE n.id = ANY(:node_ids)

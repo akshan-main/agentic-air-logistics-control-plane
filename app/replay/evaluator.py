@@ -7,12 +7,13 @@ Evaluates playbook applicability and quality.
 
 from typing import Dict, Any, Optional, List
 from uuid import UUID
+from datetime import datetime, timezone
 
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..db.engine import SessionLocal
 from .playbooks import PlaybookManager
+from .aging import compute_decay_factor, compute_policy_alignment
 
 
 class PlaybookEvaluator:
@@ -86,13 +87,32 @@ class PlaybookEvaluator:
         # Compute overall score
         overall_score = (scope_match["score"] + evidence_match["score"]) / 2
 
+        # Compute aging metadata
+        decay_factor = compute_decay_factor(
+            playbook.get("created_at", datetime.now(timezone.utc)),
+            playbook.get("last_used_at"),
+            playbook.get("domain", "operational"),
+        )
+        current_snapshot = self.playbook_manager.get_current_policy_snapshot()
+        policy_align = compute_policy_alignment(
+            playbook.get("policy_snapshot", []),
+            current_snapshot,
+        )
+
+        is_stale = decay_factor < 0.25
+        composite = overall_score * decay_factor * policy_align
+
         return {
-            "match": overall_score > 0.5,
+            "match": overall_score > 0.5 and not is_stale and composite > 0.15,
             "overall_score": overall_score,
+            "composite_score": composite,
             "scope_match": scope_match,
             "evidence_match": evidence_match,
             "playbook_stats": playbook.get("stats", {}),
             "recommended_actions": playbook.get("action_template", {}).get("action_sequence", []),
+            "decay_factor": decay_factor,
+            "policy_alignment": policy_align,
+            "is_stale": is_stale,
         }
 
     def should_use_playbook(
@@ -199,10 +219,17 @@ class PlaybookEvaluator:
             "missing_sources": [s for s in required_sources if s not in available_set],
         }
 
+    @staticmethod
+    def _normalize_action(action) -> str:
+        """Normalize action to a comparable string (handles both str and dict formats)."""
+        if isinstance(action, dict):
+            return action.get("type", str(action))
+        return str(action)
+
     def _compare_actions(
         self,
-        expected: List[str],
-        actual: List[str],
+        expected: List,
+        actual: List,
     ) -> Dict[str, Any]:
         """Compare expected vs actual actions."""
         if not expected and not actual:
@@ -214,9 +241,9 @@ class PlaybookEvaluator:
         if not actual:
             return {"score": 0.0, "detail": "Expected actions not taken"}
 
-        # Check overlap
-        expected_set = set(expected)
-        actual_set = set(actual)
+        # Normalize to strings for set comparison (handles both str and dict formats)
+        expected_set = {self._normalize_action(a) for a in expected}
+        actual_set = {self._normalize_action(a) for a in actual}
 
         overlap = len(expected_set & actual_set)
         union = len(expected_set | actual_set)

@@ -16,7 +16,6 @@ from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
 import httpx
 
-from .http import HttpClient, HttpClientError, HttpTimeoutError
 
 # OpenSky API endpoint
 OPENSKY_URL = "https://opensky-network.org/api/states/all"
@@ -72,7 +71,7 @@ AIRPORT_BBOXES: Dict[str, Tuple[float, float, float, float]] = {
     "KSJC": (36.9, 37.9, -122.4, -121.4),  # San Jose
     "KOAK": (37.2, 38.2, -122.7, -121.7),  # Oakland
     "KSNA": (33.2, 34.2, -118.2, -117.2),  # Orange County
-    "KONT": (33.6, 34.6, -118.0, -117.0),  # Ontario CA
+    "KONT": (33.6, 34.6, -118.0, -117.0),  # Ontario CA (Amazon Air)
     "KBUR": (33.9, 34.9, -118.8, -117.8),  # Burbank
     "KIND": (39.2, 40.2, -86.8, -85.8),    # Indianapolis
     "KCMH": (39.5, 40.5, -83.4, -82.4),    # Columbus OH
@@ -80,12 +79,12 @@ AIRPORT_BBOXES: Dict[str, Tuple[float, float, float, float]] = {
     "KPIT": (40.0, 41.0, -80.7, -79.7),    # Pittsburgh
     "KMCI": (38.8, 39.8, -95.1, -94.1),    # Kansas City
     "KMKE": (42.5, 43.5, -88.4, -87.4),    # Milwaukee
-    "KCVG": (38.6, 39.6, -85.1, -84.1),    # Cincinnati
+    "KCVG": (38.6, 39.6, -85.1, -84.1),    # Cincinnati (DHL Hub)
     "KRSW": (26.1, 27.1, -82.3, -81.3),    # Fort Myers
     "KPBI": (26.2, 27.2, -80.6, -79.6),    # West Palm Beach
     "KJAX": (29.6, 30.6, -82.2, -81.2),    # Jacksonville
-    "KSDF": (37.8, 38.8, -86.2, -85.2),    # Louisville
-    "KMEM": (34.6, 35.6, -90.5, -89.5),    # Memphis
+    "KSDF": (37.8, 38.8, -86.2, -85.2),    # Louisville (UPS Hub)
+    "KMEM": (34.6, 35.6, -90.5, -89.5),    # Memphis (FedEx Hub)
     "KOMA": (40.9, 41.9, -96.5, -95.5),    # Omaha
     "KOKC": (35.0, 36.0, -97.9, -96.9),    # Oklahoma City
     "KTUL": (35.6, 36.6, -96.3, -95.3),    # Tulsa
@@ -103,11 +102,6 @@ AIRPORT_BBOXES: Dict[str, Tuple[float, float, float, float]] = {
     # ==========================================================================
     # CARGO HUBS (Important for freight forwarders)
     # ==========================================================================
-    "KSDF": (37.8, 38.8, -86.2, -85.2),    # Louisville (UPS Hub)
-    "KMEM": (34.6, 35.6, -90.5, -89.5),    # Memphis (FedEx Hub)
-    "PANC": (60.7, 61.7, -150.5, -149.5),  # Anchorage (Asia-US cargo)
-    "KONT": (33.6, 34.6, -118.0, -117.0),  # Ontario CA (Amazon)
-    "KCVG": (38.6, 39.6, -85.1, -84.1),    # Cincinnati (DHL Hub)
     "KRIC": (37.0, 38.0, -77.8, -76.8),    # Richmond
     "KGSO": (35.6, 36.6, -80.4, -79.4),    # Greensboro (FedEx)
     "KRFD": (41.9, 42.9, -89.6, -88.6),    # Rockford (UPS)
@@ -123,7 +117,7 @@ AIRPORT_BBOXES: Dict[str, Tuple[float, float, float, float]] = {
     "PHTO": (19.2, 20.0, -155.6, -154.6),  # Hilo
     "PGUM": (13.0, 14.0, 144.3, 145.3),    # Guam
     "PGSN": (14.7, 15.5, 145.2, 146.2),    # Saipan
-    "PANC": (60.7, 61.7, -150.5, -149.5),  # Anchorage
+    "PANC": (60.7, 61.7, -150.5, -149.5),  # Anchorage (Asia-US cargo hub)
     "PAFA": (64.3, 65.3, -148.5, -147.5),  # Fairbanks
     "PAJN": (57.8, 58.8, -135.2, -134.2),  # Juneau
 

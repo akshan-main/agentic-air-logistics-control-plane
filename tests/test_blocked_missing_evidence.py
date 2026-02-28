@@ -6,7 +6,6 @@ Verifies that shipment actions without booking evidence are blocked.
 """
 
 import json
-import pytest
 from uuid import uuid4
 from datetime import datetime, timezone
 from sqlalchemy import text
@@ -85,7 +84,6 @@ class TestOpenSkyDegradation:
 
     def test_opensky_timeout_creates_degraded_request(self, session, sample_case_id):
         """OpenSky timeout -> MissingEvidenceRequest DEGRADED (not BLOCKING)."""
-        from app.ingestion.opensky import OpenSkyIngester
 
         # Create a MissingEvidenceRequest as would happen during timeout
         request = MissingEvidenceRequest(

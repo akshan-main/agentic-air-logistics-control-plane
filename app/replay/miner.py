@@ -7,7 +7,6 @@ Extracts patterns from successful case traces.
 
 from typing import List, Dict, Any, Optional
 from uuid import UUID
-from datetime import datetime
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session

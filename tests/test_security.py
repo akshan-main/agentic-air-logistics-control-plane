@@ -6,7 +6,6 @@ Verifies PII redaction and path traversal prevention.
 """
 
 import pytest
-from pathlib import Path
 
 from app.evidence.extract import redact_pii, extract_excerpt, PII_PATTERNS
 from app.evidence.store import safe_evidence_path, PathTraversalError, InvalidHashError
@@ -154,7 +153,7 @@ class TestEvidenceStoreImmutability:
 
     def test_evidence_file_not_overwritten(self, tmp_path, monkeypatch):
         """Same content doesn't overwrite existing evidence."""
-        from app.evidence.store import store_evidence, EVIDENCE_ROOT
+        from app.evidence.store import store_evidence
 
         # Patch EVIDENCE_ROOT to use temp directory
         monkeypatch.setattr("app.evidence.store.EVIDENCE_ROOT", tmp_path)

@@ -6,7 +6,6 @@ Fetches real data from all 5 APIs, runs the complete pipeline,
 and returns everything: evidence, claims, graph, cascade, posture, actions.
 """
 
-import json
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -176,7 +175,6 @@ def _detect_contradictions(claims: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     # Look for contradictions (simplified)
     faa_normal = any("no FAA disruptions" in c["text"] for c in claims)
     has_low_vis = any("low visibility" in c["text"] for c in claims)
-    has_strong_wind = any("strong winds" in c["text"] for c in claims)
     has_ifr = any("IFR" in c["text"] or "LIFR" in c["text"] for c in claims)
 
     if faa_normal and (has_low_vis or has_ifr):

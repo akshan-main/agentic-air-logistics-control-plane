@@ -5,7 +5,6 @@ Webhook executor - fires HTTP POST to registered destinations.
 This is the "system that DOES something" when posture changes.
 """
 
-import json
 import httpx
 from typing import Dict, Any, List, Optional
 from uuid import UUID, uuid4

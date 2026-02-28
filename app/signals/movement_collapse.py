@@ -8,7 +8,7 @@ It does NOT assign severity or make decisions - that's the LLM's job.
 
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 from ..ingestion.opensky import OpenSkyResponse
 

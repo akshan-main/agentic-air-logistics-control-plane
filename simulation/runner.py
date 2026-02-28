@@ -7,9 +7,10 @@ instead of real API calls. It validates that the agent produces the expected
 posture for each scenario.
 """
 
+from __future__ import annotations
+
 import json
-import signal
-from typing import Dict, Any, Optional, List, Generator
+from typing import Dict, Any, Optional, List, Generator, TYPE_CHECKING
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
@@ -18,7 +19,10 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from .scenarios import Scenario, SCENARIOS, get_scenario, ExpectedPosture
+if TYPE_CHECKING:
+    from app.agents.orchestrator import Orchestrator
+
+from .scenarios import Scenario, SCENARIOS, get_scenario
 from .generators import SimulationIngestionRegistry
 from .graph_seeder import GraphSeeder
 
@@ -257,7 +261,6 @@ class SimulationRunner:
 
             # Extract results
             actual_posture = packet.get("posture_decision", {}).get("posture")
-            metrics = packet.get("metrics", {})
 
             yield {
                 "event": "completed",
@@ -477,9 +480,6 @@ class SimulationRunner:
         This patches the investigator's registry to use simulation data
         instead of hitting real APIs.
         """
-        # Store original registry getter
-        original_registry = None
-
         def patched_start_investigation():
             """Patched version that uses simulation registry."""
             from app.agents.roles.investigator import InvestigatorAgent

@@ -1,249 +1,239 @@
-# Agentic Air Logistics Control Plane — Context Graph + Multi-Agent Orchestration for Air Freight Forwarding
+# Agentic Air Logistics Control Plane
 
-Agentic Air Logistics Control Plane ingests real disruption signals (FAA NAS status, METAR/TAF, NWS alerts, OpenSky ADS‑B), stores raw payload bytes as immutable evidence, builds a bi-temporal **context graph**, and runs a deterministic **multi-agent** state machine to emit a governed **decision packet** with a gateway posture:
+A multi-agent system for air freight gateway posture decisions. It ingests live disruption signals (FAA ground stops, METAR/TAF weather, NWS alerts, OpenSky ADS-B traffic), stores every raw payload as immutable SHA-256-addressed evidence, builds a bi-temporal context graph, and runs specialist agents through a deterministic state machine to produce a governed **decision packet** — the canonical audit artifact that says what posture to take, why, and what evidence backs it.
 
-- `ACCEPT` — accept new bookings
-- `RESTRICT` — accept with constraints (tier / SLA / lane)
-- `HOLD` — pause tendering until evidence clears
-- `ESCALATE` — route to a duty manager
-
-## Why this is interesting
-
-- **Evidence binding enforced at the DB layer**: you can’t promote a claim/edge to `FACT` without linked evidence (trigger guardrail).
-- **Bi-temporal primitives + point-in-time queries**: edges/claims carry *event time* (`event_time_start/end`) and *ingest time* (`ingested_at`). The canonical predicate is in `app/graph/visibility.py`, and `POST /graph/bitemporal/beliefs` returns edges/claims/evidence visible “as-of” a given `(event_time, ingest_time)` for audit/debug.
-- **Deterministic orchestration**: a state machine coordinates specialist agents (not an unbounded ReAct loop).
-- **Decision packets**: posture + rationale + claims+evidence + contradictions + policies + actions + metrics (PDL) in one audit artifact.
-- **Simulation + ops graph seeding**: run scenarios, seed shipments/flights/bookings, and run cascade analysis from an airport disruption.
+The four postures: **ACCEPT** (open for bookings), **RESTRICT** (accept with constraints), **HOLD** (pause until evidence clears), **ESCALATE** (route to a duty manager).
 
 ![Decision packet](docs/images/packet.svg)
 
-## The pipeline (runtime + detailed decomposition)
+## What makes this different
 
-Runtime orchestration is in `app/agents/orchestrator.py` (specialist-role state machine). The repo also includes a more granular 12-state decomposition in `app/agents/state_graph.py` (used as the “detailed pipeline” spec + belief-state modeling).
+**The system knows what it doesn't know.** When a source fetch fails (OpenSky timeout, NWS 503), it doesn't silently degrade — it records a `missing_evidence_request` with a criticality level. BLOCKING missing evidence stops the entire case until resolved. The packet shows exactly what's missing and why.
 
-![12-state pipeline](docs/images/pipeline.svg)
+**Evidence binding is enforced at the database level.** A Postgres trigger rejects any attempt to promote a claim or edge to FACT without linked evidence. You literally cannot have an unsupported fact in the graph.
 
-| State | What happens |
-|---|---|
-| `S0_INIT_CASE` | Initialize the case scope + baseline posture |
-| `S1_INGEST_SIGNALS` | Ingest signals (FAA, weather, alerts, ADS‑B) into evidence store + graph |
-| `S2_BUILD_BELIEF_STATE` | Build the belief state (hypotheses, uncertainties, posture) from graph |
-| `S3_DETECT_CONTRADICTIONS` | Detect contradictions (e.g., FAA says ground stop but ADS‑B shows movement) |
-| `S4_PLAN_NEXT_EVIDENCE` | Plan what evidence to gather next (bounded + deterministic planner) |
-| `S5_GATHER_EVIDENCE` | Actually gather that evidence (HTTP clients + retries) |
-| `S6_EVALUATE_POSTCONDITIONS` | Evaluate: do we have enough evidence to proceed or loop back? |
-| `S7_PROPOSE_ACTIONS` | Propose actions (hold tendering, restrict bookings, notify, etc.) |
-| `S8_GOVERNANCE_REVIEW` | Governance review (policy checks + approval requirements) |
-| `S9_EXECUTE_OR_BLOCK` | Execute safe actions or block pending approvals/missing evidence |
-| `S10_PACKETIZE_AND_PERSIST` | Build + persist the decision packet (audit trail) |
-| `S11_REPLAY_AND_LEARN` | Mine/reuse playbooks for similar future cases |
+**Orchestration is a state machine, not a ReAct loop.** Six specialist agents (Investigator, RiskQuant, Critic, PolicyJudge, Comms, Executor) run in a fixed sequence with deterministic transitions. The planner uses beam search (width 4, depth 4) to score candidate actions by information gain and cost — no LLM calls in the planning step.
 
-Runtime (what actually runs) is the specialist-role machine:
+**Actions go through governance.** Every proposed action follows a lifecycle: PROPOSED → PENDING_APPROVAL → APPROVED → EXECUTING → COMPLETED (or FAILED → ROLLED_BACK). The policy engine evaluates 13 built-in rules covering evidence requirements, approval thresholds, risk-posture mappings, and operational constraints. If a shipment action (hold cargo, rebook flight, etc.) is proposed without booking evidence, the system blocks the case and creates a missing evidence request rather than executing blindly.
 
-`INIT → INVESTIGATE → QUANTIFY_RISK → CRITIQUE → EVALUATE_POLICY → PLAN_ACTIONS → (DRAFT_COMMS) → EXECUTE → COMPLETE`
+**The graph is bi-temporal.** Every edge and claim tracks both event time (when it happened in the real world) and ingest time (when the system learned about it). This means you can query the graph "as of" any point in time for audit and replay.
 
-## Multi-agent roles (specialists)
-- **Investigator**: gathers evidence + creates initial claims/edges
-- **RiskQuant**: LLM-assisted risk assessment with confidence breakdown
-- **Critic**: challenges evidence quality; can force reinvestigation
-- **PolicyJudge**: evaluates governance policies; can veto/propose constraints
-- **Comms**: drafts notifications (internal/external)
-- **Executor**: executes approved actions and records outcomes
+**Playbooks learn and decay.** Resolved cases get mined for reusable patterns. These playbooks age with domain-specific half-lives — weather patterns decay in 30 days, operational patterns in 90, regulatory patterns in 180. When policies change, the system detects drift by comparing policy snapshots using Jaccard similarity, automatically reducing the relevance of stale playbooks.
 
-## Tech stack
+## How it works
 
-- **API**: FastAPI + Pydantic v2
-- **DB**: Postgres + `pgvector` (HNSW/IVFFlat index with version-aware fallback)
-- **Data access**: SQLAlchemy 2.x + psycopg2
-- **Ingestion**: `httpx` + `tenacity` retries (FAA/NWS/weather/OpenSky)
-- **LLM (optional)**: OpenAI SDK + Anthropic SDK behind `app/llm/client.py`
-- **Dev/test**: `pytest` (+ asyncio), Docker Compose for local DB
+The runtime pipeline is straightforward:
 
-![Overview](docs/images/overview.svg)
-
-## How data actually flows (ingestion → decision)
-
-1. **Ingest sources** in parallel (`FAA_NAS`, `METAR`, `TAF`, `NWS_ALERTS`, `OPENSKY`).
-2. **Store raw bytes** as immutable evidence (SHA‑256 addressed) + create `evidence` DB rows.
-3. **Derive signals** from evidence into graph edges (e.g., disruption, weather risk, movement collapse) with evidence binding.
-4. **Detect contradictions / uncertainties** and record missing evidence requests when a source fails.
-5. **Run roles** (RiskQuant/Critic/PolicyJudge/Planner/Executor) under deterministic orchestration.
-6. **Emit a decision packet** (posture + rationale + evidence + policies + actions + metrics).
-
-Note: `POST /ingest/airport/{icao}` is a pre-seed/debug endpoint that writes **evidence**. A case run is what turns that evidence into **graph edges** + a **decision packet**.
-
-## Demo paths (so the UI doesn’t look “random”)
-
-There are **two different kinds of data** in this repo:
-
-- **Disruption signals** (FAA/weather/alerts/ADS‑B): ingested as immutable evidence and turned into airport edges/claims.
-- **Operational entities** (flights/shipments/bookings): **simulated demo data** used to show cascade impact and shipment-level governance.
-
-The UI now exposes explicit controls:
-
-1. **Posture-only demo (no ops graph)**: Select airport → *Ingest Signals* → *Create Case* → *Run Agent*. You’ll get posture + evidence; the cascade section may be empty.
-2. **Cascade demo (ops graph)**: Select airport → *Refresh Ops Graph* → *Create Case* → *Run Agent*. The cascade section will show flights/shipments/bookings and will label the source as `SIMULATION`.
-3. **Scenario demo**: `POST /simulation/run/<scenario_id>` runs a full canned scenario (and seeds ops data if missing).
-
-The built-in ops simulation intentionally uses a small set of major airports (see `simulation/operational_data.py`) to keep the demo graph lightweight; extend it if you want a larger network.
-
-If you want a clean slate for one airport’s operational graph: *Clear Ops Graph* (or `DELETE /simulation/seed/airport/{ICAO}`). *Refresh Ops Graph* clears existing `SIMULATION` ops data touching the selected airport before seeding so SLA times stay anchored near “now”.
-
-## Key terms
-
-- **Disruption**: any signal implying reduced or uncertain capacity at/around an airport (ground stop programs, severe alerts, forecast deterioration, traffic anomalies).
-- **Risk**: probability-weighted impact on commitments, expressed with a source-level confidence breakdown (what succeeded / failed / is missing).
-- **Evidence**: raw source payload bytes stored immutably (hash-addressed) so downstream claims cite exact bytes.
-- **Claim**: a statement with status `DRAFT` / `FACT` / `HYPOTHESIS` / `RETRACTED`.
-- **Bi-temporal**: every edge/claim tracks *event time* (`event_time_start/end`, best-effort from source; falls back to retrieval time) and *ingest time* (`ingested_at`, when the system learned it). The default UI flow ingests most sources “on-demand” for a run, so `ingested_at` often clusters around the run time; the point-in-time API is for audit/debug and replay across multiple ingests.
-- **Resolved (missing evidence)**: when a source fetch fails, the system records a `missing_evidence_request`. When a later successful fetch arrives, it sets `resolved_at` + `resolved_by_evidence_id`. **BLOCKING** missing evidence stops the case from proceeding until resolved.
-- **Decision packet**: the audit artifact output of a run.
-
-![Bi-temporal model](docs/images/bitemporal.svg)
-
-## “Knows what it doesn’t know”
-
-1. **Missing evidence is first-class state** (`missing_evidence_request`) instead of hand-waving uncertainty.
-   - `BLOCKING` missing evidence causes the case to complete as `BLOCKED` (packet includes what’s missing and why).
-   - Once evidence arrives, requests are automatically marked resolved; re-run the case to generate an updated packet.
-2. **FACT requires evidence**: DB triggers reject “FACT without evidence” promotions.
-
-## Run options
-
-Prereqs: Python 3.11+ and Postgres with `pgvector`. This is not “Supabase vs local” — it’s **just Postgres** via `DATABASE_URL`.
-
-### Option A: One-command setup (recommended)
-
-This creates `.venv`, installs deps (including LLM client libs), validates DB connectivity, and runs migrations.
-Re-run it after pulling updates to apply any new migrations (it’s idempotent).
-
-```bash
-cp .env.example .env
-# edit .env: set DATABASE_URL (and LLM keys if running agent workflows)
-./setup.sh  # or: make setup
+```
+INIT → INVESTIGATE → QUANTIFY_RISK → CRITIQUE → EVALUATE_POLICY → PLAN_ACTIONS → EXECUTE → COMPLETE
 ```
 
-Then run the server:
+Under the hood, a more detailed 12-state decomposition handles the mechanics:
+
+![Pipeline](docs/images/pipeline.svg)
+
+1. Ingest all five sources in parallel via ThreadPoolExecutor
+2. Store raw bytes as immutable evidence (deduplicated by source + ref + SHA-256)
+3. Derive graph edges from evidence (FAA disruption, weather risk, NWS alert, movement collapse) — each edge is bound to the evidence that produced it
+4. Detect contradictions — the system catches things like "FAA says normal operations but ADS-B shows traffic collapsed to 30% of baseline"
+5. Run the specialist agents: Investigator gathers evidence and creates claims, RiskQuant assesses risk with an LLM, Critic challenges evidence quality, PolicyJudge evaluates all 13 policies
+6. Plan actions via beam search, then execute approved ones through the governance state machine
+7. Package everything into a decision packet and persist it
+8. Mine playbooks from the resolved case for future reference
+
+Webhooks fire on posture changes, action executions, case resolution, and imminent SLA breaches. Registration includes SSRF protection (private IP ranges are blocked).
+
+## Getting started
+
+You need Python 3.11+ and Postgres with pgvector. Any Postgres will work — local, Docker, Supabase, Neon.
 
 ```bash
-make run
+cp .env.example .env          # set DATABASE_URL, optionally LLM keys
+./setup.sh                     # creates venv, installs deps, runs migrations
+make run                       # starts FastAPI on :8000
 ```
 
 Open `http://localhost:8000/ui/`.
 
-### Option B: Local Postgres via Docker Desktop
+The setup script is idempotent — re-run it after pulling to apply new migrations. If you'd rather use Docker for Postgres: `make up` first, then `./setup.sh && make run`.
+
+For full agent runs (not just ingestion/graph), you need an LLM provider:
 
 ```bash
-  make up
-./setup.sh   # runs migrations against DATABASE_URL
-make run
+# in .env
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+# or: LLM_PROVIDER=anthropic + ANTHROPIC_API_KEY
 ```
 
-If you don’t have Docker installed, `make up` prints a clear error and install hint.
+## Try it out
 
-### Option C: Hosted Postgres (Supabase / Neon)
-
-1. Create a Postgres instance (Supabase or Neon).
-2. Set `DATABASE_URL` in `.env`.
-3. Run:
+**Quick demo** — ingest real signals for JFK, create a case, run the agent:
 
 ```bash
-./setup.sh
-make run
-```
-
-### Option D: Local Postgres (Homebrew)
-
-```bash
-brew install postgresql@16 pgvector
-brew services start postgresql@16
-createdb <your_db_name>
-./setup.sh
-make run
-```
-
-### Migrations via `make` (if you have `psql`)
-
-`make migrate` runs SQL migrations using `psql` and expects `DATABASE_URL` in your shell environment:
-
-```bash
-set -a && source .env && set +a
-make migrate
-```
-
-## LLM providers (optional but required for full agent runs)
-
-Some endpoints (ingestion/graph) work without an LLM. The **case orchestration** flow uses an LLM provider.
-
-In `.env`:
-
-```bash
-LLM_PROVIDER=openai        # or: anthropic
-OPENAI_API_KEY=...         # required if LLM_PROVIDER=openai
-# ANTHROPIC_API_KEY=...    # required if LLM_PROVIDER=anthropic
-```
-
-If you’re not using `./setup.sh`, install LLM deps explicitly:
-
-```bash
-pip install -e ".[dev,llm]"
-```
-
-## Minimal demo (API)
-
-```bash
-curl -X POST http://localhost:8000/ingest/airport/KJFK
-
-curl -X POST http://localhost:8000/cases \
+curl -X POST localhost:8000/ingest/airport/KJFK
+curl -X POST localhost:8000/cases \
   -H "Content-Type: application/json" \
   -d '{"case_type":"AIRPORT_DISRUPTION","scope":{"airport":"KJFK"}}'
-
-curl -X POST http://localhost:8000/cases/<case_id>/run
-curl http://localhost:8000/packets/<case_id>
+curl -X POST localhost:8000/cases/<case_id>/run
+curl localhost:8000/packets/<case_id>
 ```
 
-## Simulation (built-in demo harness)
+**Scenario demo** — run a pre-built scenario that seeds operational data (flights, shipments, bookings) and runs the full pipeline including cascade analysis:
 
 ```bash
-curl http://localhost:8000/simulation/scenarios
-curl -X POST http://localhost:8000/simulation/run/<scenario_id>
-curl http://localhost:8000/simulation/validate
+curl localhost:8000/simulation/scenarios                           # list scenarios
+curl -X POST localhost:8000/simulation/run/jfk_ground_stop         # run one
+curl -X POST localhost:8000/simulation/run-batch \
+  -H "Content-Type: application/json" \
+  -d '{"scenario_ids":["jfk_ground_stop","ord_thunderstorm","lax_clear_skies"]}'
 ```
 
-Operational graph seeding:
+**UI demo** — the web UI at `/ui/` has three paths:
+1. *Posture-only*: select airport → Ingest Signals → Create Case → Run Agent
+2. *With cascade*: select airport → Refresh Ops Graph → Create Case → Run Agent (shows flights/shipments/bookings)
+3. *Scenario*: hit the simulation API — everything is automated
 
-```bash
-curl -X POST http://localhost:8000/simulation/seed/airport/KJFK   # refresh=true (default)
-curl http://localhost:8000/simulation/graph/operational-stats
-```
+The simulation uses a small set of major airports to keep things lightweight. `Refresh Ops Graph` clears and re-seeds so SLA times stay anchored near "now".
 
-Cascade analysis from an airport:
+## Under the hood
 
-```bash
-curl http://localhost:8000/graph/cascade/KJFK
-curl http://localhost:8000/graph/shipments-with-booking/KJFK
-```
+### Agents and their support systems
+
+The six agents (Investigator, RiskQuant, Critic, PolicyJudge, Comms, Executor) are backed by several subsystems:
+
+**Guardrails** (`app/agents/guardrails/`) — hard-fail gates that block unsafe operations. EvidenceBindingGate prevents promoting claims to FACT without evidence. NoShipmentActionWithoutBookingGate blocks cargo operations without booking proof (creates a MissingEvidenceRequest and sets the case to BLOCKED). NonWorkflowGate verifies that different cases actually produce different reasoning paths, not just a replayed script.
+
+**Memory** (`app/agents/memory/`) — episodic memory recalls similar past cases (filtered by type and airport) with their trace events and outcomes. Semantic memory retrieves playbooks ranked by `success_rate * decay_factor * policy_alignment * confidence`, detecting policy drift via Jaccard similarity of policy text snapshots. Working memory holds the current run's accumulated state.
+
+**Planner** (`app/agents/planner/`) — deterministic beam search that scores investigation actions by `information_gain - cost` and intervention actions by `action_value - cost - risk_penalty`, using pre-computed lookup tables. No LLM involved.
+
+### Governance
+
+Every action goes through `app/governance/`:
+
+- **State machine**: 7 states (PROPOSED → PENDING_APPROVAL → APPROVED → EXECUTING → COMPLETED/FAILED → ROLLED_BACK) with enforced transitions and trace logging
+- **Approvals**: request/approve/reject flow; cases auto-resolve when all actions reach terminal states
+- **Rollback**: action-specific rollback logic for SET_POSTURE, PUBLISH_GATEWAY_ADVISORY, UPDATE_BOOKING_RULES, TRIGGER_REEVALUATION, and HOLD_CARGO
+
+### Policies
+
+13 built-in policies in `app/policy/builtin_policies.py`, seeded to Postgres via migration 005:
+
+- *Evidence*: contradiction resolution required, minimum evidence threshold, shipment booking evidence required, contradiction + stale data handling
+- *Approval*: high/critical risk requires approval, premium SLA actions require approval, cost threshold approval
+- *Risk-posture*: critical risk cannot be ACCEPT, high risk recommends HOLD
+- *Operational*: low risk allows ACCEPT, medium allows RESTRICT, weather evidence required, IFR conditions require review
+
+The PolicyJudge evaluates all active policies. A post-LLM safety override prevents false BLOCK verdicts when no shipment actions are actually proposed (the LLM sometimes gets this wrong).
+
+### Signal detection
+
+`app/signals/` detects four types of contradictions across sources: FAA-weather mismatch (normal ops vs IFR/LIFR), FAA-movement mismatch (normal ops vs traffic collapse), weather-movement mismatch (VFR vs aircraft collapse), and stale FAA data. Movement collapse computes percent-of-baseline against per-airport reference values. The derivation pipeline turns raw evidence into typed graph edges (FAA disruption, weather risk, NWS alert, movement collapse).
+
+### Playbook aging
+
+Resolved cases get mined into playbooks (`app/replay/`). Relevance decays exponentially: weather playbooks have a 30-day half-life, operational 90 days, customs/regulatory 180 days. Formula: `decay = 0.5^(age_days / half_life)`. When policies change between when a playbook was created and now, alignment scoring via Jaccard similarity of policy text hashes reduces the playbook's weight. Low sample counts also incur a confidence penalty.
+
+### Webhooks
+
+`app/webhooks/` provides event-driven HTTP POST notifications for four events: POSTURE_CHANGE, ACTION_EXECUTED, CASE_RESOLVED, SLA_BREACH_IMMINENT. Standardized payload format with delivery logging. Webhook registration validates URLs and blocks private IP ranges (SSRF protection).
 
 ## Testing
 
 ```bash
-# Fast tests (no DB)
+# Fast (no DB required)
 pytest tests/test_security.py tests/test_agent_non_workflow.py -v -m "not requires_db"
 
-# Full suite (requires a test DB)
+# Full suite (needs Postgres)
 pytest tests/ -v
 ```
 
-You *can* store evidence by UUID/timestamp, but then you must build separate mechanisms for dedup, immutability guarantees, and stable byte-identities for binding.
+## Audit warehouse and Cortex RAG
+
+Snowflake is the analytics and audit layer — Postgres stays as the operational DB.
+
+```
+Postgres (operational) → Airflow → Snowflake (audit) → Cortex Search → /rag/query
+```
+
+Decision packets are extracted from Postgres, flattened into JSONL, loaded into Snowflake RAW tables via MERGE (idempotent by primary key), then aggregated into GOLD tables (posture daily, contradictions daily, evidence coverage daily).
+
+**Two-tier Cortex Search** indexes packets at two granularity levels:
+
+- **PACKET_SEARCH** — packet-level rationale and cascade impact text. Good for broad questions like "Which airports had HOLD posture and why?"
+- **DETAIL_SEARCH** — individual policy evaluations, shipments, contradictions, claims, and actions exploded into `RAW.PACKET_DETAILS` (one row per sub-component). Good for precise questions like "Which policy blocked the JFK case?" or "Which premium shipments had imminent SLA breaches?"
+
+`POST /rag/query` queries both tiers, merges and deduplicates results, then generates a grounded answer via AI_COMPLETE. Citations are deterministic (case_ids from search results, not parsed from LLM output). The response includes both `snippets` (packet-level) and `details` (granular sub-documents with `detail_type` labels).
+
+### Snowflake setup
+
+1. Create an account in a Cortex-supported region (US East/West, EU)
+2. Create warehouse: `CREATE WAREHOUSE AALCP_CORTEX_WH WAREHOUSE_SIZE='X-SMALL' AUTO_SUSPEND=60 AUTO_RESUME=TRUE;`
+3. Run `audit_warehouse/sql/01_schema.sql` in a Snowflake Worksheet
+4. Add credentials to `.env`: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PASSWORD`
+
+### Running the pipeline
+
+```bash
+python -m audit_warehouse.load preflight   # check Postgres + Snowflake connectivity
+python -m audit_warehouse.load run         # extract + load with structured logging
+python -m audit_warehouse.load verify      # 8 data quality checks (row counts incl. PACKET_DETAILS,
+                                           # freshness, NULL rationale %, uniqueness, GOLD tables,
+                                           # watermarks, both Cortex Search services reachable)
+```
+
+Each run writes structured JSON metrics to `audit_warehouse/logs/run_<id>.jsonl`. The Airflow DAG (`airflow/dags/aalcp_audit_pipeline.py`) automates the full cycle: simulate → extract → load → quality gates → refresh both Cortex Search services → smoke test RAG (7 queries including granular policy and shipment questions).
+
+### Design notes
+
+Packets are immutable after resolution — the case table has no `updated_at` by design. Watermarking on `created_at` is correct because resolved cases never get reprocessed; re-evaluation creates a new case. Snowflake PRIMARY KEY declarations are not enforced — idempotency comes from the MERGE ON clause, not from Snowflake constraints. The RAG prompt instructs the model to respond with "Insufficient evidence in retrieved packets" when snippets don't support an answer. Granular details use a synthetic primary key (`case_id::detail_type::seq`) for deterministic MERGE.
+
+## API reference
+
+| Endpoint | What it does |
+|----------|-------------|
+| `POST /cases` | Create a case |
+| `POST /cases/{id}/run` | Run agent orchestration |
+| `GET /cases/{id}` | Case status |
+| `POST /ingest/airport/{icao}` | Ingest all 5 sources |
+| `GET /packets/{case_id}` | Full decision packet |
+| `GET /packets/{case_id}/summary` | Packet summary |
+| `GET /packets` | List packets |
+| `POST /graph/bitemporal/beliefs` | Point-in-time graph query |
+| `GET /graph/cascade/{icao}` | Cascade impact analysis |
+| `POST /sandbox/explore/{icao}` | Full pipeline with real data |
+| `GET /playbooks` | Playbooks with aging scores |
+| `POST /webhooks/register` | Register webhook |
+| `GET /webhooks/deliveries` | Delivery log |
+| `POST /simulation/run/{scenario_id}` | Run scenario |
+| `POST /simulation/run-batch` | Run multiple scenarios |
+| `POST /simulation/seed/airport/{icao}` | Seed operational graph |
+| `POST /rag/query` | Cortex Search + AI_COMPLETE Q&A |
 
 ## Repo map
 
-- `app/ingestion/` — FAA / weather / alerts / ADS‑B clients
-- `app/evidence/` — immutable evidence store + hashing + excerpt redaction
-- `app/graph/` — bi-temporal graph + traversal + retrieval
-- `app/agents/` — deterministic orchestrator + roles + guardrails
-- `app/packets/` — decision packet builder
-- `simulation/` — scenarios + operational data seeding
-- `docs/DATA_SOURCES.md` — implemented sources + coverage rules
-
-![Decision packet](docs/images/packet.svg)
+```
+app/
+  api/              routes: cases, graph, ingest, packets, playbooks, webhooks, sandbox, RAG
+  agents/
+    orchestrator.py  deterministic state machine
+    roles/           investigator, risk_quant, critic, policy_judge, comms, executor
+    guardrails/      evidence binding, booking gate, missing evidence blocker
+    memory/          episodic, semantic, working
+    planner/         beam search + action library
+  governance/        approval workflows, action state machine, rollback
+  policy/            engine + 13 built-in policies
+  signals/           contradiction, movement collapse, weather, congestion, derivation
+  graph/             bi-temporal store, traversal, retrieval, similarity, visibility
+  ingestion/         FAA, METAR/TAF, NWS, OpenSky clients
+  evidence/          immutable store, hashing, excerpt redaction
+  packets/           decision packet builder + models
+  replay/            playbook mining, evaluation, aging
+  webhooks/          registry, executor, SSRF protection
+  db/migrations/     7 migrations (schema, triggers, indexes, policies, dedup, aging)
+audit_warehouse/     Snowflake SQL (4 scripts), extract/load pipeline (packets + details), run logs
+rag/                 Two-tier Cortex Search (packet + detail) + AI_COMPLETE module
+airflow/             DAG (6 tasks, 7 smoke test queries), Dockerfile, docker-compose
+simulation/          scenarios, operational data, graph seeder, runner
+```
